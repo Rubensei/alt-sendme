@@ -37,6 +37,15 @@ class NativeUtils(private val activity: Activity) : Plugin(activity) {
                 put("uri", uri.toString())
                 put("path", uri.extractOsPath())
             })
+
+            activity.contentResolver.persistedUriPermissions.stream()
+                .filter { it.uri != uri }
+                .forEach {
+                    activity.contentResolver.releasePersistableUriPermission(
+                        it.uri,
+                        RW_PERMISSION_FLAGS
+                    )
+                }
         } catch (e: Exception) {
             invoke.reject(e.message)
         }
