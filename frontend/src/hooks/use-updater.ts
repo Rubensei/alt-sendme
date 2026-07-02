@@ -9,6 +9,7 @@ import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
 import { toastManager } from '../components/ui/toast'
 import { useTranslation } from '../i18n/react-i18next-compat'
+import { IS_WEB } from '../lib/platform'
 
 type UpdateInfo = Awaited<ReturnType<typeof check>>
 
@@ -22,6 +23,9 @@ export const updaterQueryOptions = {
 		queryOptions({
 			queryKey: updaterQueryKeys.checkUpdate(),
 			queryFn: async () => {
+				if (IS_WEB) {
+					return null
+				}
 				return check()
 			},
 			retry: 1,
@@ -63,6 +67,9 @@ export const useCheckForUpdatesMutation = () => {
 
 	return useMutation({
 		mutationFn: async () => {
+			if (IS_WEB) {
+				return null
+			}
 			const update = await check()
 			return update
 		},
@@ -83,6 +90,9 @@ export const useInstallUpdateMutation = () => {
 
 	return useMutation({
 		mutationFn: async () => {
+			if (IS_WEB) {
+				return
+			}
 			const update = await check()
 			if (update) {
 				await update.downloadAndInstall()

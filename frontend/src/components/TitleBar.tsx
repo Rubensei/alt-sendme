@@ -1,11 +1,16 @@
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWindow } from '@/lib/platform-api'
 import { Minus, X } from 'lucide-react'
+import { IS_TAURI } from '@/lib/platform'
 
 interface TitleBarProps {
 	title?: string
 }
 
 export const TitleBar = ({ title = 'ALT-SENDME' }: TitleBarProps) => {
+	if (!IS_TAURI) {
+		return null
+	}
+
 	const handleMinimize = async () => {
 		const window = await getCurrentWindow()
 		await window.minimize()

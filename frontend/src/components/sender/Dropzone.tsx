@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/lib/platform-api'
 import {
 	ChevronDown,
 	ChevronRight,

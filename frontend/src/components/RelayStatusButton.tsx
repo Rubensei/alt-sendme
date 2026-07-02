@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/lib/platform-api'
 import { buttonVariants } from './ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { LazyIcon } from './icons'

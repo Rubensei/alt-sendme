@@ -1,5 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { invoke, listen } from '@/lib/platform-api'
 import { useEffect, useRef, useState } from 'react'
 import * as SingleLayoutPage from '@/components/common/SingleLayoutPage'
 import { Receiver } from '@/components/receiver/Receiver'

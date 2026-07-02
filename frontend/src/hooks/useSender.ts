@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { invoke, listen, type UnlistenFn } from '@/lib/platform-api'
+import { isWebPreviewError } from '@/lib/web-preview-error'
 import { useTranslation } from '../i18n/react-i18next-compat'
 import type { AlertType } from '../types/ui'
 import type { TransferMetadata, TransferProgress } from '../types/transfer'
@@ -649,7 +649,9 @@ export function useSender(): UseSenderReturn {
 			console.error('[useSender] startSharing: failed:', error)
 			showAlert(
 				t('common:errors.sharingFailed'),
-				`${t('common:errors.sharingFailedDesc')}: ${error}`,
+				isWebPreviewError(error)
+					? t('common:webPreview.transferUnavailable')
+					: `${t('common:errors.sharingFailedDesc')}: ${error}`,
 				'error'
 			)
 		} finally {

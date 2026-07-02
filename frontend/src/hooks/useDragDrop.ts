@@ -1,11 +1,9 @@
-import { invoke } from '@tauri-apps/api/core'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { open } from '@tauri-apps/plugin-dialog'
+import { getCurrentWindow, invoke, openDialog } from '@/lib/platform-api'
 import { selectSendDocument, selectSendFolder } from '@/plugins/nativeUtils'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from '../i18n/react-i18next-compat'
 import type { AlertDialogState, AlertType } from '../types/ui'
-import { IS_ANDROID } from '@/lib/platform'
+import { IS_ANDROID, IS_TAURI } from '@/lib/platform'
 
 export interface UseDragDropReturn {
 	isDragActive: boolean
@@ -179,7 +177,7 @@ export function useDragDrop(
 
 				return
 			} else {
-				const selected = await open({
+				const selected = await openDialog({
 					multiple: true,
 					directory: false,
 				})
@@ -228,13 +226,16 @@ export function useDragDrop(
 
 				return
 			} else {
-				const selected = await open({
+				const selected = await openDialog({
 					multiple: false,
 					directory: true,
 				})
 
 				if (selected) {
-					await triggerFilesSelect([selected], 'directory')
+					const path = Array.isArray(selected) ? selected[0] : selected
+					if (path) {
+						await triggerFilesSelect([path], 'directory')
+					}
 				}
 			}
 		} catch (error) {
@@ -248,53 +249,76 @@ export function useDragDrop(
 	}, [showAlert, t, triggerFilesSelect])
 
 	useEffect(() => {
-		const window = getCurrentWindow()
+		if (!IS_TAURI) {
+			return
+		}
 
 		let dropUnlisten: (() => void) | undefined
 		let hoverUnlisten: (() => void) | undefined
 		let cancelUnlisten: (() => void) | undefined
+		let disposed = false
 
-		window
-			.listen<{ paths: string[]; position: { x: number; y: number } }>(
-				'tauri://drag-drop',
-				(event) => {
-					setIsDragActive(false)
+		const setupWindowListeners = async () => {
+			const window = await getCurrentWindow()
+			if (disposed) return
 
-					if (event.payload?.paths && event.payload.paths.length > 0) {
-						void triggerFilesSelect(event.payload.paths)
+			window
+				.listen<{ paths: string[]; position: { x: number; y: number } }>(
+					'tauri://drag-drop',
+					(event) => {
+						setIsDragActive(false)
+
+						if (event.payload?.paths && event.payload.paths.length > 0) {
+							void triggerFilesSelect(event.payload.paths)
+						}
 					}
-				}
-			)
-			.then((unlisten) => {
-				dropUnlisten = unlisten
-			})
-			.catch((err) => {
-				console.error('Failed to register drag-drop listener:', err)
-			})
+				)
+				.then((unlisten) => {
+					if (disposed) {
+						unlisten()
+						return
+					}
+					dropUnlisten = unlisten
+				})
+				.catch((err) => {
+					console.error('Failed to register drag-drop listener:', err)
+				})
 
-		window
-			.listen('tauri://drag-hover', () => {
-				setIsDragActive(true)
-			})
-			.then((unlisten) => {
-				hoverUnlisten = unlisten
-			})
-			.catch((err) => {
-				console.error('Failed to register drag-hover listener:', err)
-			})
+			window
+				.listen('tauri://drag-hover', () => {
+					setIsDragActive(true)
+				})
+				.then((unlisten) => {
+					if (disposed) {
+						unlisten()
+						return
+					}
+					hoverUnlisten = unlisten
+				})
+				.catch((err) => {
+					console.error('Failed to register drag-hover listener:', err)
+				})
 
-		window
-			.listen('tauri://drag-leave', () => {
-				setIsDragActive(false)
-			})
-			.then((unlisten) => {
-				cancelUnlisten = unlisten
-			})
-			.catch((err) => {
-				console.error('Failed to register drag-leave listener:', err)
-			})
+			window
+				.listen('tauri://drag-leave', () => {
+					setIsDragActive(false)
+				})
+				.then((unlisten) => {
+					if (disposed) {
+						unlisten()
+						return
+					}
+					cancelUnlisten = unlisten
+				})
+				.catch((err) => {
+					console.error('Failed to register drag-leave listener:', err)
+				})
+		}
+
+		void setupWindowListeners()
 
 		return () => {
+			disposed = true
 			dropUnlisten?.()
 			hoverUnlisten?.()
 			cancelUnlisten?.()
@@ -335,7 +359,7 @@ export function useDragDrop(
 				return
 			}
 
-			const selected = await open({
+			const selected = await openDialog({
 				multiple: true,
 				directory: true,
 			})

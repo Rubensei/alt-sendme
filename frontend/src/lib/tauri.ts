@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from './platform-api'
 
 export interface TauriCommands {
 	start_sharing: (path: string) => Promise<string>

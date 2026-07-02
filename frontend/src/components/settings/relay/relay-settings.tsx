@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/lib/platform-api'
 import { AlertCircle, Check, Loader2, Minus, Plus } from 'lucide-react'
 import ReactCountryFlag from 'react-country-flag'
 import { useTranslation } from '../../../i18n'

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/lib/platform-api'
 import { useTranslation } from '../../../i18n'
 import { useAppSettingStore } from '../../../store/app-setting'
 import { FrameDescription, FrameTitle } from '../../ui/frame'

@@ -1,8 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { downloadDir, join } from '@tauri-apps/api/path'
-import { open } from '@tauri-apps/plugin-dialog'
-import { revealItemInDir } from '@tauri-apps/plugin-opener'
+import { downloadDir, invoke, joinPath, listen, openDialog, revealItemInDir, type UnlistenFn } from '@/lib/platform-api'
 import { selectDownloadFolder } from '@/plugins/nativeUtils'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from '../i18n/react-i18next-compat'
@@ -15,6 +11,7 @@ import type {
 } from '../types/transfer'
 import { SpeedAverager, calculateETA } from '../utils/etaUtils'
 import { IS_ANDROID } from '@/lib/platform'
+import { isWebPreviewError } from '@/lib/web-preview-error'
 import { getRelayConfigArg } from '../lib/relay'
 import { useAppSettingStore } from '@/store/app-setting'
 
@@ -139,7 +136,7 @@ export function useReceiver(): UseReceiverReturn {
 				return name
 			}
 			try {
-				return await join(basePath, name)
+				return await joinPath(basePath, name)
 			} catch (error) {
 				console.error('Failed to join path for reveal:', error)
 				return basePath
@@ -162,7 +159,7 @@ export function useReceiver(): UseReceiverReturn {
 		const [topLevel] = normalized.split('/')
 		if (topLevel) {
 			try {
-				return await join(basePath, topLevel)
+				return await joinPath(basePath, topLevel)
 			} catch (error) {
 				console.error('Failed to join directory path for reveal:', error)
 			}
@@ -485,10 +482,13 @@ export function useReceiver(): UseReceiverReturn {
 				selected = response.path
 				setDownloadsPath(selected)
 			} else {
-				selected = await open({
+				const dialogSelection = await openDialog({
 					multiple: false,
 					directory: true,
 				})
+				selected = Array.isArray(dialogSelection)
+					? (dialogSelection[0] ?? null)
+					: dialogSelection
 			}
 
 			if (selected) {
@@ -528,7 +528,13 @@ export function useReceiver(): UseReceiverReturn {
 			})
 		} catch (error) {
 			console.error('Failed to receive file:', error)
-			showAlert(t('common:errors.receiveFailed'), String(error), 'error')
+			showAlert(
+				t('common:errors.receiveFailed'),
+				isWebPreviewError(error)
+					? t('common:webPreview.transferUnavailable')
+					: String(error),
+				'error'
+			)
 			setIsReceiving(false)
 			setIsTransporting(false)
 			setIsCompleted(false)

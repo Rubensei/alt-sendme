@@ -1,12 +1,10 @@
-import { platform } from '@tauri-apps/plugin-os'
 import { useTranslation } from '../../../i18n'
+import { IS_WINDOWS } from '@/lib/platform'
 import { Frame, FrameHeader, FramePanel, FrameTitle } from '../../ui/frame'
 import { ContextMenuToggle } from './context-menu-toggle'
 import { MinimizeSystemTray } from './minimize-system-tray'
 import { ShowProgressOnIcon } from './show-progress-on-icon'
 import { StartOnStartup } from './start-on-startup'
-
-const isWindows = platform() === 'windows'
 
 export function SystemTray() {
 	const { t } = useTranslation()
@@ -19,7 +17,7 @@ export function SystemTray() {
 				<MinimizeSystemTray />
 				<ShowProgressOnIcon />
 				<StartOnStartup />
-				{isWindows && <ContextMenuToggle />}
+				{IS_WINDOWS && <ContextMenuToggle />}
 			</FramePanel>
 		</Frame>
 	)

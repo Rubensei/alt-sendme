@@ -1,6 +1,6 @@
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWindow } from '@/lib/platform-api'
 import type React from 'react'
-import { IS_MACOS } from '@/lib/platform'
+import { IS_MACOS, IS_TAURI } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 
 interface CustomTitleBarProps {
@@ -12,6 +12,10 @@ const CustomTitleBar: React.FC<CustomTitleBarProps> = ({
 	children,
 	className,
 }) => {
+	if (!IS_TAURI) {
+		return children ? <div className={className}>{children}</div> : null
+	}
+
 	return (
 		<div
 			className={cn(
@@ -38,7 +42,7 @@ const CustomTitleBar: React.FC<CustomTitleBarProps> = ({
 const WindowControls: React.FC = () => {
 	const minimize = async () => {
 		try {
-			const window = getCurrentWindow()
+			const window = await getCurrentWindow()
 			await window.minimize()
 		} catch (error) {
 			console.error('Failed to minimize window:', error)
@@ -47,7 +51,7 @@ const WindowControls: React.FC = () => {
 
 	const maximize = async () => {
 		try {
-			const window = getCurrentWindow()
+			const window = await getCurrentWindow()
 			await window.toggleMaximize()
 		} catch (error) {
 			console.error('Failed to maximize window:', error)
@@ -56,7 +60,7 @@ const WindowControls: React.FC = () => {
 
 	const close = async () => {
 		try {
-			const window = getCurrentWindow()
+			const window = await getCurrentWindow()
 			await window.close()
 		} catch (error) {
 			console.error('Failed to close window:', error)

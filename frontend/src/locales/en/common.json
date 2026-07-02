@@ -1,7 +1,10 @@
 {
 	"appTitle": "AltSendme",
 	"send": "Send",
-	"comingSoon": "Coming Soon",
+	"webPreview": {
+		"banner": "Preview mode — file transfers require the desktop app.",
+		"transferUnavailable": "File transfer is not available in the web preview. Download the desktop app to send and receive files."
+	},
 	"receive": "Receive",
 	"ok": "OK",
 	"undo": "Undo",

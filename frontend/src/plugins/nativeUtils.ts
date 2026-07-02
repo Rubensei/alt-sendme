@@ -1,4 +1,5 @@
-import { Channel, invoke } from '@tauri-apps/api/core'
+import { IS_TAURI } from '@/lib/platform'
+import { invoke, openDialog } from '@/lib/platform-api'
 
 export type DownloadFolderSelectionResponse = {
 	uri: string
@@ -12,23 +13,30 @@ export type CopyProgress = {
 }
 
 export class FileSelectedHandler {
-	private channel: Channel<CopyProgress>
+	private channelId: string
 	private active = true
 
-	constructor(channel: Channel<CopyProgress>) {
-		this.channel = channel
+	constructor(channelId: string) {
+		this.channelId = channelId
 	}
 
 	public async cancelJob() {
 		if (!this.active) return
 		await invoke<void>('plugin:native-utils|cancel_job', {
-			job: { channelId: this.channel.id },
+			job: { channelId: this.channelId },
 		})
 		this.active = false
 	}
 }
 
 export async function selectDownloadFolder(): Promise<DownloadFolderSelectionResponse | null> {
+	if (!IS_TAURI) {
+		const selected = await openDialog({ directory: true, multiple: false })
+		if (!selected) return null
+		const path = Array.isArray(selected) ? selected[0] : selected
+		return { uri: path, path }
+	}
+
 	return await invoke<DownloadFolderSelectionResponse>(
 		'plugin:native-utils|select_download_folder'
 	)
@@ -39,6 +47,18 @@ export async function selectSendDocument(
 	onEvent: (event: CopyProgress) => void,
 	onComplete: (path: string) => void
 ): Promise<FileSelectedHandler | null> {
+	if (!IS_TAURI) {
+		const selected = await openDialog({ multiple: true, directory: false })
+		if (!selected) return null
+		const paths = Array.isArray(selected) ? selected : [selected]
+		for (const path of paths) {
+			onStart(path, BigInt(0))
+			onComplete(path)
+		}
+		return null
+	}
+
+	const { Channel } = await import('@tauri-apps/api/core')
 	const channel = new Channel<CopyProgress>()
 	channel.onmessage = (event: CopyProgress) => {
 		if (event.progress === 0 && event.cachedPath) {
@@ -56,7 +76,7 @@ export async function selectSendDocument(
 		}
 	)
 	if (!response) return null
-	return new FileSelectedHandler(channel)
+	return new FileSelectedHandler(String(channel.id))
 }
 
 export async function selectSendFolder(
@@ -64,6 +84,17 @@ export async function selectSendFolder(
 	onEvent: (event: CopyProgress) => void,
 	onComplete: (path: string) => void
 ): Promise<FileSelectedHandler | null> {
+	if (!IS_TAURI) {
+		const selected = await openDialog({ multiple: false, directory: true })
+		if (!selected) return null
+		const path = Array.isArray(selected) ? selected[0] : selected
+		if (!path) return null
+		onStart(path, BigInt(0))
+		onComplete(path)
+		return null
+	}
+
+	const { Channel } = await import('@tauri-apps/api/core')
 	const channel = new Channel<CopyProgress>()
 	channel.onmessage = (event: CopyProgress) => {
 		if (event.progress === 0 && event.cachedPath) {
@@ -81,5 +112,5 @@ export async function selectSendFolder(
 		}
 	)
 	if (!response) return null
-	return new FileSelectedHandler(channel)
+	return new FileSelectedHandler(String(channel.id))
 }

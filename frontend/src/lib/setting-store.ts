@@ -1,6 +1,6 @@
-import { LazyStore } from '@tauri-apps/plugin-store'
 import type { StateStorage } from 'zustand/middleware'
 import type { AppSettingsState } from '../store/app-setting'
+import { IS_WEB } from './platform'
 
 export const SETTING_FILE = 'settings.json'
 
@@ -19,20 +19,34 @@ export const defaultAppSettings: AppSettingsState = {
 	relayFallback: 'strict',
 	showBroadcastToggle: false,
 }
-export const localSettingStore = new LazyStore(SETTING_FILE, {
-	autoSave: true,
-	defaults: defaultAppSettings,
-})
-export const localSettingLazyStoreStorage: StateStorage = {
-	getItem: async (name: string) => {
-		const value = await localSettingStore.get<string>(name)
-		return value || null
-	},
+
+const webSettingStorage: StateStorage = {
+	getItem: async (name: string) => localStorage.getItem(name),
 	setItem: async (name: string, value: string) => {
-		await localSettingStore.set(name, value)
-		await localSettingStore.save()
+		localStorage.setItem(name, value)
 	},
 	removeItem: async (name: string) => {
-		await localSettingStore.delete(name)
+		localStorage.removeItem(name)
 	},
 }
+
+let tauriSettingStorage: StateStorage | null = null
+
+async function getTauriSettingStorage(): Promise<StateStorage> {
+	if (!tauriSettingStorage) {
+		const { createTauriSettingStorage } = await import('./setting-store-tauri')
+		tauriSettingStorage = createTauriSettingStorage()
+	}
+	return tauriSettingStorage
+}
+
+export const localSettingLazyStoreStorage: StateStorage = IS_WEB
+	? webSettingStorage
+	: {
+			getItem: async (name: string) =>
+				(await getTauriSettingStorage()).getItem(name),
+			setItem: async (name: string, value: string) =>
+				(await getTauriSettingStorage()).setItem(name, value),
+			removeItem: async (name: string) =>
+				(await getTauriSettingStorage()).removeItem(name),
+		}
