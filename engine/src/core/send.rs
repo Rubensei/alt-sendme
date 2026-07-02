@@ -25,10 +25,8 @@ use iroh_blobs::{
 use iroh_blobs::store::fs::FsStore;
 use n0_future::{task::AbortOnDropHandle, StreamExt};
 use std::io::ErrorKind;
-use std::{
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+use std::path::PathBuf;
+use crate::time_compat::{sleep, timeout, Duration, Instant};
 use tokio::sync::mpsc;
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::select;
@@ -49,7 +47,7 @@ impl ProtocolHandler for MetadataProtocol {
     /// It reads a metadata request marker (1 byte) from client, responds with a length-prefixed JSON metadata payload, and waits for the client to close the connection before finishing.
     async fn accept(&self, connection: iroh::endpoint::Connection) -> Result<(), AcceptError> {
         let (mut send_stream, mut recv_stream) =
-            match tokio::time::timeout(Duration::from_secs(30), connection.accept_bi()).await {
+            match timeout(Duration::from_secs(30), connection.accept_bi()).await {
                 Ok(Ok(streams)) => streams,
                 Ok(Err(err)) => return Err(err.into()),
                 Err(_) => {
@@ -61,7 +59,7 @@ impl ProtocolHandler for MetadataProtocol {
         tracing::info!("metadata protocol bi stream accepted");
 
         let mut req = [0u8; 1];
-        tokio::time::timeout(Duration::from_secs(10), recv_stream.read_exact(&mut req))
+        timeout(Duration::from_secs(10), recv_stream.read_exact(&mut req))
             .await
             .map_err(|_| {
                 AcceptError::from_err(std::io::Error::new(
@@ -99,7 +97,7 @@ impl ProtocolHandler for MetadataProtocol {
         let len_prefix = (meta_bytes.len() as u32).to_be_bytes();
 
         // Send 4 bytes of length prefix followed by the JSON metadata
-        tokio::time::timeout(Duration::from_secs(10), send_stream.write_all(&len_prefix))
+        timeout(Duration::from_secs(10), send_stream.write_all(&len_prefix))
             .await
             .map_err(|_| {
                 AcceptError::from_err(std::io::Error::new(
@@ -108,7 +106,7 @@ impl ProtocolHandler for MetadataProtocol {
                 ))
             })?
             .map_err(AcceptError::from_err)?;
-        tokio::time::timeout(Duration::from_secs(20), send_stream.write_all(&meta_bytes))
+        timeout(Duration::from_secs(20), send_stream.write_all(&meta_bytes))
             .await
             .map_err(|_| {
                 AcceptError::from_err(std::io::Error::new(
@@ -124,7 +122,7 @@ impl ProtocolHandler for MetadataProtocol {
         // This prevents tearing down the QUIC connection before the data buffers are flushed.
         // We give it 30s which is more than the client's read timeout.
         let mut eof_buf = [0u8; 1];
-        let _ = tokio::time::timeout(Duration::from_secs(30), recv_stream.read(&mut eof_buf)).await;
+        let _ = timeout(Duration::from_secs(30), recv_stream.read(&mut eof_buf)).await;
 
         tracing::info!(bytes = meta_bytes.len(), "metadata sent");
 
@@ -144,17 +142,26 @@ fn emit_progress_event(
     app_handle: &AppHandle,
     bytes_transferred: u64,
     total_size: u64,
-    speed: f64,
+    speed_bps: f64,
 ) {
     if let Some(handle) = app_handle {
         let event_name = "transfer-progress";
 
-        // Keep legacy payload format for frontend compatibility: "bytes:total:speed"
-        let payload = format!("{}:{}:{}", bytes_transferred, total_size, speed);
+        // Match receive-progress encoding: speed as fixed-point int (×1000).
+        let speed_int = (speed_bps * 1000.0) as i64;
+        let payload = format!("{}:{}:{}", bytes_transferred, total_size, speed_int);
         if let Err(e) = handle.emit_event_with_payload(event_name, &payload) {
             tracing::warn!("Failed to emit progress event: {}", e);
         }
     }
+}
+
+fn speed_bps_from_elapsed(transferred: u64, elapsed_secs: f64) -> f64 {
+    const MIN_ELAPSED_SECS: f64 = 0.1;
+    if elapsed_secs < MIN_ELAPSED_SECS {
+        return 0.0;
+    }
+    transferred as f64 / elapsed_secs
 }
 
 fn emit_active_connection_count(app_handle: &AppHandle, count: usize) {
@@ -404,7 +411,7 @@ where
         .spawn();
 
     let ep = router.endpoint();
-    tokio::time::timeout(Duration::from_secs(30), async move {
+    timeout(Duration::from_secs(30), async move {
         if !matches!(relay_mode, RelayMode::Disabled) {
             let _ = ep.online().await;
         }
@@ -429,6 +436,24 @@ where
         progress_handle: AbortOnDropHandle::new(progress_handle),
         cleanup_dir,
     })
+}
+
+/// Range specs used by receivers before the main payload download (hash-seq + child sizes).
+fn is_sizes_probe_request(ranges: &iroh_blobs::protocol::ChunkRangesSeq) -> bool {
+    use iroh_blobs::protocol::{ChunkRanges, ChunkRangesExt, ChunkRangesSeq};
+
+    ranges == &ChunkRangesSeq::verified_child_sizes()
+        || ranges
+            == &ChunkRangesSeq::from_ranges_infinite([ChunkRanges::all(), ChunkRanges::last_chunk()])
+}
+
+/// Only treat a request as the final payload transfer once nearly all bytes were sent.
+fn transfer_payload_complete(bytes_sent: u64, total_size: u64) -> bool {
+    if total_size == 0 {
+        return true;
+    }
+    // Size probes only fetch hash-seq headers and last chunks — far below payload size.
+    bytes_sent.saturating_mul(100) >= total_size.saturating_mul(95)
 }
 
 async fn show_provide_progress_with_logging(
@@ -478,10 +503,7 @@ async fn show_provide_progress_with_logging(
                     iroh_blobs::provider::events::ProviderMessage::ConnectionClosed(_msg) => {
                     }
                     iroh_blobs::provider::events::ProviderMessage::GetRequestReceivedNotify(msg) => {
-                        let is_sizes_probe_request =
-                            (entry_type == "directory" || entry_type == "collection")
-                                && msg.request.ranges
-                                    == iroh_blobs::protocol::ChunkRangesSeq::verified_child_sizes();
+                        let is_sizes_probe_request = is_sizes_probe_request(&msg.request.ranges);
 
                         let connection_id = msg.connection_id;
                         let request_id = msg.request_id;
@@ -501,6 +523,7 @@ async fn show_provide_progress_with_logging(
                         let has_emitted_completed_task = has_emitted_completed.clone();
                         let last_request_time_task = last_request_time.clone();
                         let entry_type_task = entry_type.clone();
+                        let total_collection_size_task = total_collection_size;
 
                         let mut rx = msg.rx;
                         tasks.push(async move {
@@ -620,11 +643,10 @@ async fn show_provide_progress_with_logging(
                                                 )
                                             })
                                         } {
-                                            let speed_bps = if elapsed > 0.0 {
-                                                transferred as f64 / elapsed
-                                            } else {
-                                                0.0
-                                            };
+                                            let speed_bps = speed_bps_from_elapsed(
+                                                transferred.min(total_size),
+                                                elapsed,
+                                            );
                                             emit_progress_event(
                                                 &app_handle_task,
                                                 transferred.min(total_size),
@@ -635,42 +657,53 @@ async fn show_provide_progress_with_logging(
                                     }
                                     iroh_blobs::provider::events::RequestUpdate::Completed(_m) => {
                                         if transfer_started && !request_completed {
-                                            {
+                                            let bytes_sent = {
                                                 let mut states = transfer_states_task.lock().await;
-                                                if let Some(state) = states.get_mut(&(connection_id, request_id)) {
+                                                if let Some(state) =
+                                                    states.get_mut(&(connection_id, request_id))
+                                                {
                                                     if !state.ignore_current_blob {
                                                         state.accounted_payload_bytes = state
                                                             .accounted_payload_bytes
                                                             .saturating_add(state.current_blob_size)
                                                             .min(state.total_size);
                                                     }
+                                                    Some(state.accounted_payload_bytes)
+                                                } else {
+                                                    None
                                                 }
-                                            }
+                                            };
 
                                             let active_count = {
                                                 let mut states = transfer_states_task.lock().await;
                                                 states.remove(&(connection_id, request_id));
-                                                let active_count = states.len();
-                                                active_count
+                                                states.len()
                                             };
 
                                             emit_active_connection_count(&app_handle_task, active_count);
 
                                             request_completed = true;
 
+                                            if !transfer_payload_complete(
+                                                bytes_sent.unwrap_or(0),
+                                                total_collection_size_task,
+                                            ) {
+                                                active_requests_task.fetch_sub(1, Ordering::SeqCst);
+                                                continue;
+                                            }
+
                                             let completed = completed_requests_task.fetch_add(1, Ordering::SeqCst) + 1;
                                             let active = active_requests_task.load(Ordering::SeqCst);
 
-                                            // The receiver makes a single execute_get request for the entire transfer.
-                                            // The size probe request is ignored above and does not increment active/completed.
-                                            // Therefore, a single completed request always indicates the end of the transfer.
+                                            // Size-probe requests are ignored above. A completed payload
+                                            // request with all bytes sent indicates the end of the transfer.
                                             let min_required = 1;
 
                                             if completed >= active
                                                 && completed >= min_required {
                                                 let active_before_wait = active;
 
-                                                tokio::time::sleep(Duration::from_millis(500)).await;
+                                                sleep(Duration::from_millis(500)).await;
 
                                                 let completed_after = completed_requests_task.load(Ordering::SeqCst);
                                                 let active_after = active_requests_task.load(Ordering::SeqCst);
@@ -731,19 +764,31 @@ async fn show_provide_progress_with_logging(
                             }
 
                             if transfer_started && !request_completed {
+                                let bytes_sent = {
+                                    let states = transfer_states_task.lock().await;
+                                    states
+                                        .get(&(connection_id, request_id))
+                                        .map(|state| state.accounted_payload_bytes)
+                                };
+
+                                if !transfer_payload_complete(
+                                    bytes_sent.unwrap_or(0),
+                                    total_collection_size_task,
+                                ) {
+                                    active_requests_task.fetch_sub(1, Ordering::SeqCst);
+                                    return;
+                                }
+
                                 let completed = completed_requests_task.fetch_add(1, Ordering::SeqCst) + 1;
                                 let active = active_requests_task.load(Ordering::SeqCst);
 
-                                // The receiver makes a single execute_get request for the entire transfer.
-                                // The size probe request is ignored above and does not increment active/completed.
-                                // Therefore, a single completed request always indicates the end of the transfer.
                                 let min_required = 1;
 
                                 if completed >= active
                                     && completed >= min_required {
                                     let active_before_wait = active;
 
-                                    tokio::time::sleep(Duration::from_millis(500)).await;
+                                    sleep(Duration::from_millis(500)).await;
 
                                     let completed_after = completed_requests_task.load(Ordering::SeqCst);
                                     let active_after = active_requests_task.load(Ordering::SeqCst);
@@ -793,9 +838,6 @@ async fn show_provide_progress_with_logging(
     let completed = completed_requests.load(Ordering::SeqCst);
     let active = active_requests.load(Ordering::SeqCst);
 
-    // The receiver makes a single execute_get request for the entire transfer.
-    // The size probe request is ignored above and does not increment active/completed.
-    // Therefore, a single completed request always indicates the end of the transfer.
     let min_required = 1;
 
     if completed >= active && completed >= min_required && completed > 0 {
@@ -809,5 +851,24 @@ async fn show_provide_progress_with_logging(
 
 #[cfg(test)]
 mod tests {
-    // Path canonicalization tests live in import_native.
+    use super::{is_sizes_probe_request, transfer_payload_complete};
+    use iroh_blobs::protocol::{ChunkRanges, ChunkRangesExt, ChunkRangesSeq};
+
+    #[test]
+    fn sizes_probe_detection() {
+        assert!(is_sizes_probe_request(&ChunkRangesSeq::verified_child_sizes()));
+        assert!(is_sizes_probe_request(&ChunkRangesSeq::from_ranges_infinite([
+            ChunkRanges::all(),
+            ChunkRanges::last_chunk(),
+        ])));
+        assert!(!is_sizes_probe_request(&ChunkRangesSeq::all()));
+    }
+
+    #[test]
+    fn payload_complete_threshold() {
+        assert!(transfer_payload_complete(1000, 1000));
+        assert!(transfer_payload_complete(950, 1000));
+        assert!(!transfer_payload_complete(100, 1000));
+        assert!(transfer_payload_complete(0, 0));
+    }
 }

@@ -1,7 +1,24 @@
 export type { UnlistenFn } from '@tauri-apps/api/event'
 
 import type { UnlistenFn } from '@tauri-apps/api/event'
+import {
+	ensureEngineWasm,
+	getWebSharingTicket,
+	triggerBrowserDownload,
+	wasmFetchTicketMetadata,
+	wasmReceiveFile,
+	wasmSendFile,
+	wasmStopSharing,
+} from './engine-wasm-client'
 import { IS_TAURI, IS_WEB } from './platform'
+import { subscribeWebEvent } from './web-event-bus'
+import {
+	getWebFile,
+	isWebDirectory,
+	registerWebDirectory,
+	registerWebFile,
+	webFilePathKey,
+} from './web-file-store'
 import { WebPreviewError } from './web-preview-error'
 
 type DialogOptions = {
@@ -28,23 +45,143 @@ const webWindowStub: TauriWindowStub = {
 	listen: async () => noopUnlisten,
 }
 
+function webTransferUnavailable(): never {
+	throw new WebPreviewError(
+		'Web transfers require a built WASM engine. Run: pnpm build:wasm'
+	)
+}
+
+function buildWebSendMetadata(file: File) {
+	return JSON.stringify({
+		file_name: file.name,
+		item_count: 1,
+		size: file.size,
+		mime_type: file.type || 'application/octet-stream',
+	})
+}
+
+async function invokeWebTransfer<T>(
+	cmd: string,
+	args?: Record<string, unknown>
+): Promise<T> {
+	switch (cmd) {
+		case 'fetch_ticket_metadata': {
+			const ticket = String(args?.ticket ?? '').trim()
+			if (!ticket) {
+				throw new Error('Ticket is required')
+			}
+			const json = await wasmFetchTicketMetadata(ticket)
+			return JSON.parse(json) as T
+		}
+		case 'send_items':
+		case 'start_sharing': {
+			const paths =
+				cmd === 'start_sharing'
+					? [String(args?.path ?? '')]
+					: ((args?.paths as string[] | undefined) ?? [])
+
+			if (paths.length !== 1) {
+				throw new WebPreviewError(
+					'Web transfers support a single file at a time.'
+				)
+			}
+
+			const path = paths[0]
+			if (!path) {
+				throw new Error('No file selected')
+			}
+			if (isWebDirectory(path)) {
+				throw new WebPreviewError(
+					'Folder sharing is not available in the browser yet.'
+				)
+			}
+
+			const file = getWebFile(path)
+			if (!file) {
+				throw new WebPreviewError(
+					'Selected file is no longer available. Please choose the file again.'
+				)
+			}
+
+			const bytes = new Uint8Array(await file.arrayBuffer())
+			const ticket = await wasmSendFile(
+				file.name,
+				bytes,
+				buildWebSendMetadata(file)
+			)
+			return ticket as T
+		}
+		case 'receive_file': {
+			const ticket = String(args?.ticket ?? '').trim()
+			if (!ticket) {
+				throw new Error('Ticket is required')
+			}
+
+			const { fileName, bytes } = await wasmReceiveFile(ticket)
+			triggerBrowserDownload(bytes, fileName)
+			return `Downloaded ${fileName}` as T
+		}
+		case 'stop_sharing':
+			await wasmStopSharing()
+			return undefined as T
+		default:
+			return invokeWebStub<T>(cmd, args)
+	}
+}
+
+async function invokeWeb<T>(
+	cmd: string,
+	args?: Record<string, unknown>
+): Promise<T> {
+	switch (cmd) {
+		case 'fetch_ticket_metadata':
+		case 'send_items':
+		case 'start_sharing':
+		case 'receive_file':
+		case 'stop_sharing':
+			try {
+				await ensureEngineWasm()
+			} catch (error) {
+				console.error('Failed to initialize engine-wasm:', error)
+				webTransferUnavailable()
+			}
+			return invokeWebTransfer<T>(cmd, args)
+		default:
+			return invokeWebStub<T>(cmd, args)
+	}
+}
+
 function invokeWebStub<T>(cmd: string, args?: Record<string, unknown>): T {
 	switch (cmd) {
 		case 'check_launch_intent':
 			return null as T
 		case 'check_path_type': {
 			const path = String(args?.path ?? '')
+			if (isWebDirectory(path)) {
+				return 'directory' as T
+			}
+			if (getWebFile(path)) {
+				return 'file' as T
+			}
 			return (path.endsWith('/') ? 'directory' : 'file') as T
 		}
 		case 'get_paths_mime_types': {
 			const paths = (args?.paths as string[] | undefined) ?? []
-			return paths.map(() => null) as T
+			return paths.map((path) => {
+				if (isWebDirectory(path)) {
+					return 'inode/directory'
+				}
+				const file = getWebFile(path)
+				return file?.type || null
+			}) as T
 		}
-		case 'get_file_size':
-			return 0 as T
+		case 'get_file_size': {
+			const path = String(args?.path ?? '')
+			const file = getWebFile(path)
+			return (file?.size ?? 0) as T
+		}
 		case 'get_sharing_status':
-			return null as T
-		case 'stop_sharing':
+			return getWebSharingTicket() as T
 		case 'toggle_context_menu':
 			return undefined as T
 		case 'get_relay_status':
@@ -56,18 +193,13 @@ function invokeWebStub<T>(cmd: string, args?: Record<string, unknown>): T {
 			} as T
 		case 'verify_relays':
 			throw new WebPreviewError('Relay verification is not available in the web preview.')
-		case 'fetch_ticket_metadata':
-		case 'send_items':
-		case 'receive_file':
-		case 'start_sharing':
-			throw new WebPreviewError()
 		case 'plugin:native-utils|select_download_folder':
 		case 'plugin:native-utils|select_send_document':
 		case 'plugin:native-utils|select_send_folder':
 		case 'plugin:native-utils|cancel_job':
 			return null as T
 		default:
-			console.warn(`[web preview] unhandled invoke: ${cmd}`)
+			console.warn(`[web] unhandled invoke: ${cmd}`)
 			throw new WebPreviewError()
 	}
 }
@@ -77,7 +209,7 @@ export async function invoke<T>(
 	args?: Record<string, unknown>
 ): Promise<T> {
 	if (IS_WEB) {
-		return invokeWebStub<T>(cmd, args)
+		return invokeWeb<T>(cmd, args)
 	}
 
 	const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
@@ -89,7 +221,7 @@ export async function listen<T>(
 	handler: (event: { payload: T }) => void
 ): Promise<UnlistenFn> {
 	if (IS_WEB) {
-		return noopUnlisten
+		return subscribeWebEvent(event, handler as (event: { payload: unknown }) => void)
 	}
 
 	const { listen: tauriListen } = await import('@tauri-apps/api/event')
@@ -144,12 +276,20 @@ function pickPathsInBrowser(
 					if (root) topLevel.add(root)
 				}
 				const folders = [...topLevel]
+				for (const folder of folders) {
+					registerWebDirectory(folder)
+				}
 				resolve(options.multiple ? folders : (folders[0] ?? null))
 				return
 			}
 
-			const names = Array.from(files).map((file) => file.name)
-			resolve(options.multiple ? names : (names[0] ?? null))
+			const paths: string[] = []
+			for (const file of Array.from(files)) {
+				const path = webFilePathKey(file)
+				registerWebFile(path, file)
+				paths.push(path)
+			}
+			resolve(options.multiple ? paths : (paths[0] ?? null))
 		})
 
 		input.addEventListener('cancel', () => {
@@ -168,7 +308,7 @@ export async function downloadDir(): Promise<string> {
 		return tauriDownloadDir()
 	}
 
-	return ''
+	return 'Downloads'
 }
 
 export async function joinPath(...paths: string[]): Promise<string> {

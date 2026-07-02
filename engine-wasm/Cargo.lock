@@ -1017,6 +1017,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "walkdir",
+ "web-time",
  "windows-sys 0.59.0",
 ]
 

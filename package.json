@@ -6,8 +6,10 @@
 	"scripts": {
 		"dev": "vite --mode tauri",
 		"dev:web": "vite --mode web",
+		"predev:web": "test -f frontend/src/wasm/pkg/engine_wasm.js || ./scripts/build-engine-wasm.sh",
 		"build": "tsc -b && vite build",
-		"build:web": "tsc -b && vite build --mode web",
+		"build:web": "pnpm build:wasm && tsc -b && vite build --mode web",
+		"build:wasm": "./scripts/build-engine-wasm.sh --release",
 		"preview": "vite preview",
 		"preview:web": "vite preview --mode web",
 		"tauri": "tauri",

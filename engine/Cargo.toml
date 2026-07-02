@@ -54,7 +54,8 @@ walkdir = "2.4.0"
 getrandom = { version = "0.3", features = ["wasm_js"] }
 iroh-blobs = { version = "0.103", default-features = false }
 iroh = { version = "1.0.0", default-features = false, features = ["tls-ring"] }
-tokio = { version = "1.34.0", features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "1.34.0", features = ["macros", "rt", "sync"] }
+web-time = "1"
 
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2.174", optional = true }

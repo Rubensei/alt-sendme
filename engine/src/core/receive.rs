@@ -21,13 +21,10 @@ use iroh_blobs::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 use iroh_blobs::store::fs::FsStore;
+use crate::time_compat::{sleep, timeout, Duration, Instant};
 use n0_future::StreamExt;
 use std::str::FromStr;
-use std::time::Instant;
-use tokio::{
-    io::AsyncReadExt,
-    time::{timeout, Duration},
-};
+use tokio::io::AsyncReadExt;
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::select;
 
@@ -511,7 +508,7 @@ pub async fn fetch_metadata(
                 attempt_errors.push((attempt, path, err.to_string()));
                 last_error = Some(err);
                 if will_retry {
-                    tokio::time::sleep(Duration::from_millis(300)).await;
+                    sleep(Duration::from_millis(300)).await;
                 }
             }
         }

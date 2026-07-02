@@ -218,9 +218,9 @@ export function useSender(): UseSenderReturn {
 						if (parts.length === 3) {
 							const bytesTransferred = parseInt(parts[0], 10)
 							const totalBytes = parseInt(parts[1], 10)
-							const speedRaw = Number.parseFloat(parts[2])
-							const speedBps = Number.isFinite(speedRaw)
-								? Math.max(speedRaw, 0)
+							const speedInt = parseInt(parts[2], 10)
+							const speedBps = Number.isFinite(speedInt)
+								? Math.max(speedInt / 1000, 0)
 								: 0
 							const percentage =
 								totalBytes > 0

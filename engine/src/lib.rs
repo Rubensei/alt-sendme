@@ -1,4 +1,5 @@
 pub mod core;
+mod time_compat;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use core::{

@@ -9,6 +9,8 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		plugins: [react()],
+		// Load .env.web / .env.tauri from the repo root (not frontend/).
+		envDir: path.resolve(__dirname),
 		base: isWeb ? '/web/' : '/',
 		root: path.resolve(__dirname, './frontend'),
 		resolve: {
