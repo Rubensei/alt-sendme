@@ -42,5 +42,9 @@ export default defineConfig(({ mode }) => {
 				usePolling: true,
 			},
 		},
+		preview: {
+			port: isWeb ? 3001 : 4173,
+			strictPort: true,
+		},
 	}
 })

@@ -229,8 +229,8 @@ So mixed setups are fine for getting files across, but they're **not fully priva
 ### Prerequisites
 
 - Rust 1.91+
-- Node.js 18+
-- npm or yarn
+- Node.js 20+
+- pnpm 10+
 
 ### Getting Started
 
@@ -240,41 +240,75 @@ So mixed setups are fine for getting files across, but they're **not fully priva
    cd alt-sendme
    ```
 
-2. **Install frontend dependencies**:
+2. **Install dependencies**:
    ```bash
-   npm install
+   pnpm install
    ```
 
-3. **Install Tauri**:
+3. **Install Tauri CLI** (desktop/Android):
    ```bash
    cargo install tauri-cli
    ```
 
-4. **Run in development mode**:
-   ```bash
-   cargo tauri dev
-   ```
+### Desktop (Tauri)
 
-5. **(Optional) Setup android project**:
+```bash
+pnpm tauri dev
+```
+
+Build for Tauri:
+
+```bash
+pnpm build
+pnpm tauri build
+```
+
+### Web preview (browser UI shell)
+
+Runs the React UI in the browser with Tauri APIs stubbed — transfers are not available yet.
+
+```bash
+pnpm dev:web
+```
+
+Open **`http://localhost:3001/web/`** (web mode uses the `/web/` base path for future embed at `altsendme.com/web`).
+
+Production static build:
+
+```bash
+pnpm build:web
+pnpm preview:web   # serves frontend/dist at http://localhost:3001/web/
+```
+
+### Android
+
+1. **(Optional) Setup android project**:
    ```bash
    rm src-tauri/gen/android
    cargo tauri android init
    git checkout src-tauri/gen/android
-   cargo tauri android dev
+   pnpm android:dev
    ```
-   
 
-6. **Build locally** :
+2. **Build locally**:
    ```bash
-    cargo tauri build --no-bundle
+   cargo tauri build --no-bundle
    ```
 
-7. **Install on Android** :
-   ```
-   npm run android:build -- --debug --apk
-      
+3. **Install debug APK**:
+   ```bash
+   pnpm android:build -- --debug --apk
    adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
    ```
+
+### Repo layout
+
+| Path | Purpose |
+|------|---------|
+| `frontend/` | React UI (Tauri + web targets) |
+| `src-tauri/` | Tauri desktop/Android shell |
+| `engine/` | Rust P2P transfer engine |
+| `www/` | Public Next.js site (planned — embeds web UI at `/web`) |
 
 ## Testing Locally
 
@@ -308,7 +342,7 @@ See [PRIVACY.md](PRIVACY.md) for information about how AltSendme handles your da
 
 - Better distribution
 - Phrase-based Addressing via Iroh-gossip and PAKE
-- Web version (Send and receive from browser)
+- Web preview (browser UI shell — transfers coming later)
 - iOS app
 
 [📫 Drop your Email to recieve updates](https://tally.so/r/ob2Vkx)
