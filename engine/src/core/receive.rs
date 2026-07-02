@@ -1,22 +1,19 @@
+use crate::core::export_native;
 use crate::core::send::METADATA_ALPN;
+use crate::core::storage;
 use crate::core::types::{
-    get_or_create_secret, AppHandle, AutoCleanupDir, FileMetadata, ReceiveOptions, ReceiveResult,
+    get_or_create_secret, AppHandle, FileMetadata, ReceiveOptions, ReceiveResult,
 };
 use iroh::endpoint::presets;
 use iroh::{address_lookup::dns::DnsAddressLookup, Endpoint, TransportAddr};
 use iroh_blobs::{
-    api::{
-        blobs::{ExportMode, ExportOptions, ExportProgressItem},
-        remote::GetProgressItem,
-        Store,
-    },
+    api::remote::GetProgressItem,
     format::collection::Collection,
     get::{request::get_hash_seq_and_sizes, GetError, Stats},
     store::fs::FsStore,
     ticket::BlobTicket,
 };
 use n0_future::StreamExt;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Instant;
 use tokio::{
@@ -116,6 +113,140 @@ async fn receive_metadata<S: AsyncReadExt + Unpin>(
     Ok(metadata)
 }
 
+struct DownloadToStoreResult {
+    collection: Collection,
+    total_files: u64,
+    payload_size: u64,
+    stats: Stats,
+}
+
+/// Download ticket payload into the blob store (no filesystem export).
+async fn download_to_store(
+    ticket: BlobTicket,
+    addr: iroh::EndpointAddr,
+    endpoint: &Endpoint,
+    db: &FsStore,
+    app_handle: &AppHandle,
+) -> anyhow::Result<DownloadToStoreResult> {
+    let hash_and_format = ticket.hash_and_format();
+    let local = db.remote().local(hash_and_format).await?;
+
+    let (stats, total_files, payload_size) = if !local.is_complete() {
+        emit_event(app_handle, "receive-started");
+
+        let connection = match endpoint
+            .connect(addr.clone(), iroh_blobs::protocol::ALPN)
+            .await
+        {
+            Ok(conn) => conn,
+            Err(e) => {
+                tracing::error!("Connection failed: {}", e);
+                tracing::error!("Error details: {:?}", e);
+                tracing::error!("Tried to connect to node: {}", addr.id);
+                tracing::error!("With relay: {:?}", addr.relay_urls().collect::<Vec<_>>());
+                tracing::error!(
+                    "With direct addrs: {:?}",
+                    addr.ip_addrs().collect::<Vec<_>>()
+                );
+                return Err(anyhow::anyhow!("Connection failed: {}", e));
+            }
+        };
+
+        let sizes_result =
+            get_hash_seq_and_sizes(&connection, &hash_and_format.hash, 1024 * 1024 * 32, None)
+                .await;
+
+        let (_hash_seq, sizes) = match sizes_result {
+            Ok((hash_seq, sizes)) => (hash_seq, sizes),
+            Err(e) => {
+                tracing::error!("Failed to get sizes: {:?}", e);
+                tracing::error!("Error type: {}", std::any::type_name_of_val(&e));
+                return Err(show_get_error(e).into());
+            }
+        };
+        let payload_size = sizes.iter().skip(1).copied().sum::<u64>();
+        let total_files = (sizes.len().saturating_sub(1)) as u64;
+
+        emit_progress_event(app_handle, 0, payload_size, 0.0);
+
+        let get = db.remote().execute_get(connection, local.missing());
+        let mut stats = Stats::default();
+        let mut stream = get.stream();
+        let mut last_log_offset = 0u64;
+        let transfer_start_time = Instant::now();
+
+        while let Some(item) = stream.next().await {
+            match item {
+                GetProgressItem::Progress(offset) => {
+                    if offset - last_log_offset > 1_000_000 {
+                        last_log_offset = offset;
+
+                        let elapsed = transfer_start_time.elapsed().as_secs_f64();
+                        let speed_bps = if elapsed > 0.0 {
+                            offset as f64 / elapsed
+                        } else {
+                            0.0
+                        };
+
+                        emit_progress_event(
+                            app_handle,
+                            offset.min(payload_size),
+                            payload_size,
+                            speed_bps,
+                        );
+                    }
+                }
+                GetProgressItem::Done(value) => {
+                    stats = value;
+
+                    let elapsed = transfer_start_time.elapsed().as_secs_f64();
+                    let speed_bps = if elapsed > 0.0 {
+                        payload_size as f64 / elapsed
+                    } else {
+                        0.0
+                    };
+                    emit_progress_event(app_handle, payload_size, payload_size, speed_bps);
+
+                    break;
+                }
+                GetProgressItem::Error(cause) => {
+                    tracing::error!("Download error: {:?}", cause);
+                    anyhow::bail!(show_get_error(cause));
+                }
+            }
+        }
+        (stats, total_files, payload_size)
+    } else {
+        let total_files = local.children().unwrap() - 1;
+        let payload_bytes = 0;
+
+        emit_event(app_handle, "receive-started");
+        emit_event(app_handle, "receive-completed");
+
+        (Stats::default(), total_files, payload_bytes)
+    };
+
+    let collection = Collection::load(hash_and_format.hash, db.as_ref()).await?;
+
+    let mut file_names: Vec<String> = Vec::new();
+    for (name, _hash) in collection.iter() {
+        file_names.push(name.to_string());
+    }
+
+    if !file_names.is_empty() {
+        let file_names_json =
+            serde_json::to_string(&file_names).unwrap_or_else(|_| "[]".to_string());
+        emit_event_with_payload(app_handle, "receive-file-names", &file_names_json);
+    }
+
+    Ok(DownloadToStoreResult {
+        collection,
+        total_files,
+        payload_size,
+        stats,
+    })
+}
+
 pub async fn download(
     ticket_str: String,
     options: ReceiveOptions,
@@ -144,165 +275,34 @@ pub async fn download(
 
     let endpoint = builder.bind().await?;
 
-    // Use system temp directory instead of current_dir for GUI app
-    // This avoids polluting user directories and OS manages cleanup automatically
-    let dir_name = format!(".sendme-recv-{}", ticket.hash().to_hex());
-    let temp_base = std::env::temp_dir();
-    let iroh_data_dir = temp_base.join(&dir_name);
-    let db = FsStore::load(&iroh_data_dir).await?;
-    // Set up after load so a failed load doesn't wipe an existing partial store.
-    // Cleans up on success/stop; we disarm it on failure to keep progress for resume.
-    let mut cleanup_guard = AutoCleanupDir::new(iroh_data_dir.clone());
+    let (db, iroh_data_dir) =
+        storage::create_recv_store(&ticket.hash().to_hex().to_string()).await?;
+    let mut cleanup_guard = storage::recv_cleanup_guard(iroh_data_dir);
     let db2 = db.clone();
 
     let fut = async move {
-        let hash_and_format = ticket.hash_and_format();
-        let local = db.remote().local(hash_and_format).await?;
+        let downloaded = download_to_store(ticket, addr, &endpoint, &db, &app_handle).await?;
 
-        let (stats, total_files, payload_size) = if !local.is_complete() {
-            // Emit receive-started event
-            emit_event(&app_handle, "receive-started");
-
-            let connection = match endpoint
-                .connect(addr.clone(), iroh_blobs::protocol::ALPN)
-                .await
-            {
-                Ok(conn) => conn,
-                Err(e) => {
-                    tracing::error!("Connection failed: {}", e);
-                    tracing::error!("Error details: {:?}", e);
-                    tracing::error!("Tried to connect to node: {}", addr.id);
-                    tracing::error!("With relay: {:?}", addr.relay_urls().collect::<Vec<_>>());
-                    tracing::error!(
-                        "With direct addrs: {:?}",
-                        addr.ip_addrs().collect::<Vec<_>>()
-                    );
-                    return Err(anyhow::anyhow!("Connection failed: {}", e));
-                }
-            };
-
-            let sizes_result =
-                get_hash_seq_and_sizes(&connection, &hash_and_format.hash, 1024 * 1024 * 32, None)
-                    .await;
-
-            let (_hash_seq, sizes) = match sizes_result {
-                Ok((hash_seq, sizes)) => (hash_seq, sizes),
-                Err(e) => {
-                    tracing::error!("Failed to get sizes: {:?}", e);
-                    tracing::error!("Error type: {}", std::any::type_name_of_val(&e));
-                    return Err(show_get_error(e).into());
-                }
-            };
-            let _total_size = sizes.iter().copied().sum::<u64>();
-            // For payload size, we want the actual file data size
-            // The sizes array contains: [collection_size, file1_size, file2_size, ...]
-            // We skip the first element (collection metadata) but include all file sizes
-            let payload_size = sizes.iter().skip(1).copied().sum::<u64>();
-            let total_files = (sizes.len().saturating_sub(1)) as u64;
-
-            // Emit initial progress event (0%) so frontend can display total size immediately
-            emit_progress_event(&app_handle, 0, payload_size, 0.0);
-
-            let _local_size = local.local_bytes();
-            let get = db.remote().execute_get(connection, local.missing());
-            let mut stats = Stats::default();
-            let mut stream = get.stream();
-            let mut last_log_offset = 0u64;
-            let transfer_start_time = Instant::now();
-
-            while let Some(item) = stream.next().await {
-                match item {
-                    GetProgressItem::Progress(offset) => {
-                        // Emit progress events every 1MB
-                        if offset - last_log_offset > 1_000_000 {
-                            last_log_offset = offset;
-
-                            // Calculate speed and emit progress event
-                            let elapsed = transfer_start_time.elapsed().as_secs_f64();
-                            let speed_bps = if elapsed > 0.0 {
-                                offset as f64 / elapsed
-                            } else {
-                                0.0
-                            };
-
-                            emit_progress_event(
-                                &app_handle,
-                                offset.min(payload_size),
-                                payload_size,
-                                speed_bps,
-                            );
-                        }
-                    }
-                    GetProgressItem::Done(value) => {
-                        stats = value;
-
-                        // Emit final progress event
-                        let elapsed = transfer_start_time.elapsed().as_secs_f64();
-                        let speed_bps = if elapsed > 0.0 {
-                            payload_size as f64 / elapsed
-                        } else {
-                            0.0
-                        };
-                        emit_progress_event(&app_handle, payload_size, payload_size, speed_bps);
-
-                        break;
-                    }
-                    GetProgressItem::Error(cause) => {
-                        tracing::error!("Download error: {:?}", cause);
-                        anyhow::bail!(show_get_error(cause));
-                    }
-                }
-            }
-            (stats, total_files, payload_size)
-        } else {
-            let total_files = local.children().unwrap() - 1;
-            let payload_bytes = 0; // todo local.sizes().skip(2).map(Option::unwrap).sum::<u64>();
-
-            // Emit events for already complete data
-            emit_event(&app_handle, "receive-started");
-            emit_event(&app_handle, "receive-completed");
-
-            (Stats::default(), total_files, payload_bytes)
-        };
-
-        let collection = Collection::load(hash_and_format.hash, db.as_ref()).await?;
-
-        // Extract file names from collection and emit them BEFORE export
-        // This allows the UI to show file names during the export phase
-        let mut file_names: Vec<String> = Vec::new();
-        for (name, _hash) in collection.iter() {
-            file_names.push(name.to_string());
-        }
-
-        // Emit file names information
-        if !file_names.is_empty() {
-            let file_names_json =
-                serde_json::to_string(&file_names).unwrap_or_else(|_| "[]".to_string());
-            emit_event_with_payload(&app_handle, "receive-file-names", &file_names_json);
-        }
-
-        // Determine output directory
         let output_dir = options.output_dir.unwrap_or_else(|| {
             dirs::download_dir().unwrap_or_else(|| std::env::current_dir().unwrap())
         });
 
-        let conflicts = export(&db, collection, &output_dir).await?;
+        let conflicts =
+            export_native::export_to_directory(&db, downloaded.collection, &output_dir).await?;
 
         if !conflicts.is_empty() {
             let payload = serde_json::to_string(&conflicts).unwrap_or_else(|_| "[]".to_string());
             emit_event_with_payload(&app_handle, "receive-conflicts", &payload);
         }
 
-        // Explicit call endpoint.close() to gracefully shutdown the connection
         endpoint.close().await;
 
-        // Emit completion event AFTER everything is done
         emit_event(&app_handle, "receive-completed");
 
         anyhow::Ok((
-            total_files,
-            payload_size,
-            stats,
+            downloaded.total_files,
+            downloaded.payload_size,
+            downloaded.stats,
             output_dir,
             conflicts.len(),
         ))
@@ -489,122 +489,6 @@ pub async fn fetch_metadata(
     Err(last_error.unwrap_or_else(|| anyhow::anyhow!("metadata fetch failed")))
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ExportConflict {
-    original: String,
-    resolved: String,
-}
-
-async fn export(
-    db: &Store,
-    collection: Collection,
-    output_dir: &Path,
-) -> anyhow::Result<Vec<ExportConflict>> {
-    let mut conflicts = Vec::new();
-
-    for (_i, (name, hash)) in collection.iter().enumerate() {
-        let desired_target = get_export_path(output_dir, name)?;
-        let target = if desired_target.exists() {
-            let resolved = resolve_conflict_path(&desired_target)?;
-            conflicts.push(ExportConflict {
-                original: desired_target.to_string_lossy().to_string(),
-                resolved: resolved.to_string_lossy().to_string(),
-            });
-            resolved
-        } else {
-            desired_target
-        };
-
-        if let Some(parent) = target.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                anyhow::anyhow!("failed creating export parent {}: {}", parent.display(), e)
-            })?;
-        }
-
-        let mut stream = db
-            .export_with_opts(ExportOptions {
-                hash: *hash,
-                target,
-                mode: ExportMode::Copy,
-            })
-            .stream()
-            .await;
-
-        while let Some(item) = stream.next().await {
-            match item {
-                ExportProgressItem::Size(_size) => {
-                    // Skip progress updates for library version
-                }
-                ExportProgressItem::CopyProgress(_offset) => {
-                    // Skip progress updates for library version
-                }
-                ExportProgressItem::Done => {
-                    // Export completed
-                }
-                ExportProgressItem::Error(cause) => {
-                    anyhow::bail!("error exporting {}: {}", name, cause);
-                }
-            }
-        }
-    }
-
-    Ok(conflicts)
-}
-
-fn resolve_conflict_path(path: &Path) -> anyhow::Result<PathBuf> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("path has no parent: {}", path.display()))?;
-
-    let file_name = path
-        .file_name()
-        .and_then(|x| x.to_str())
-        .ok_or_else(|| anyhow::anyhow!("invalid filename: {}", path.display()))?;
-
-    let stem = path
-        .file_stem()
-        .and_then(|x| x.to_str())
-        .ok_or_else(|| anyhow::anyhow!("invalid file stem: {}", path.display()))?;
-
-    let extension = path.extension().and_then(|x| x.to_str());
-
-    for index in 1..10_000u32 {
-        let candidate_name = if let Some(ext) = extension {
-            format!("{} ({}).{}", stem, index, ext)
-        } else {
-            format!("{} ({})", file_name, index)
-        };
-        let candidate = parent.join(candidate_name);
-        if !candidate.exists() {
-            return Ok(candidate);
-        }
-    }
-
-    anyhow::bail!("too many filename conflicts for {}", path.display())
-}
-
-fn get_export_path(root: &Path, name: &str) -> anyhow::Result<PathBuf> {
-    let parts = name.split('/');
-    let mut path = root.to_path_buf();
-    for part in parts {
-        validate_path_component(part)?;
-        path.push(part);
-    }
-    Ok(path)
-}
-
-fn validate_path_component(component: &str) -> anyhow::Result<()> {
-    anyhow::ensure!(!component.is_empty(), "empty path component");
-    anyhow::ensure!(!component.contains('/'), "contains /");
-    anyhow::ensure!(!component.contains('\\'), "contains \\");
-    anyhow::ensure!(!component.contains(':'), "contains colon");
-    anyhow::ensure!(component != "..", "parent directory traversal");
-    anyhow::ensure!(component != ".", "current directory reference");
-    anyhow::ensure!(!component.contains('\0'), "contains null byte");
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -662,71 +546,6 @@ mod tests {
         assert_eq!(fetched.size, expected_metadata.size);
         assert_eq!(fetched.thumbnail, expected_metadata.thumbnail);
         assert_eq!(fetched.mime_type, expected_metadata.mime_type);
-    }
-
-    #[test]
-    fn validate_rejects_empty() {
-        assert!(validate_path_component("").is_err());
-    }
-
-    #[test]
-    fn validate_rejects_slash() {
-        assert!(validate_path_component("a/b").is_err());
-    }
-
-    #[test]
-    fn validate_rejects_backslash() {
-        assert!(validate_path_component("a\\b").is_err());
-    }
-
-    #[test]
-    fn validate_rejects_parent_traversal() {
-        assert!(validate_path_component("..").is_err());
-    }
-
-    #[test]
-    fn validate_rejects_dot() {
-        assert!(validate_path_component(".").is_err());
-    }
-
-    #[test]
-    fn validate_rejects_null_byte() {
-        assert!(validate_path_component("a\0b").is_err());
-    }
-
-    #[test]
-    fn validate_rejects_colon() {
-        assert!(validate_path_component("C:foo").is_err());
-    }
-
-    #[test]
-    fn validate_accepts_normal() {
-        assert!(validate_path_component("file.txt").is_ok());
-        assert!(validate_path_component("my-file_v2.tar.gz").is_ok());
-    }
-
-    #[test]
-    fn get_export_path_blocks_drive_prefix() {
-        let root = Path::new("/tmp/test");
-        assert!(get_export_path(root, "C:foo").is_err());
-    }
-
-    #[test]
-    fn get_export_path_blocks_traversal() {
-        let root = Path::new("/tmp/test");
-        assert!(get_export_path(root, "../etc/passwd").is_err());
-        assert!(get_export_path(root, "subdir/../../etc/passwd").is_err());
-    }
-
-    #[test]
-    fn get_export_path_blocks_backslash() {
-        assert!(get_export_path(Path::new("/tmp/test"), "file\\name").is_err());
-    }
-
-    #[test]
-    fn get_export_path_allows_normal() {
-        let p = get_export_path(Path::new("/tmp/test"), "subdir/file.txt").unwrap();
-        assert_eq!(p, PathBuf::from("/tmp/test/subdir/file.txt"));
     }
 }
 
