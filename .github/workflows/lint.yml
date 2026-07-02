@@ -15,16 +15,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
       - name: Use Node.js
         uses: actions/setup-node@v5
         with:
           node-version: '24.x'
+          cache: pnpm
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
       - name: Run lint script
-        run: npm run lint
+        run: pnpm run lint
       - name: Run format script
-        run: npm run lint:fix && npm run format
+        run: pnpm run lint:fix && pnpm run format
 
   lockfiles-check:
     name: Reject lockfile-only changes
@@ -44,5 +48,8 @@ jobs:
           fi
           if echo "$CHANGED" | grep -q '^engine/Cargo\.lock$'; then
             echo "$CHANGED" | grep -q '^engine/Cargo\.toml$' || fail "engine/Cargo.lock was modified but engine/Cargo.toml was not. Only change Cargo.lock when you add/update dependencies in Cargo.toml. To discard: git checkout origin/main -- engine/Cargo.lock"
+          fi
+          if echo "$CHANGED" | grep -q '^pnpm-lock\.yaml$'; then
+            echo "$CHANGED" | grep -q '^package\.json$' || fail "pnpm-lock.yaml was modified but package.json was not. Only change pnpm-lock.yaml when you add/update dependencies in package.json. To discard: git checkout origin/main -- pnpm-lock.yaml"
           fi
           echo "Lockfiles check passed."

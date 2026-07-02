@@ -1,0 +1,3 @@
+packages:
+  - .
+  # - www  # Phase B: public Next.js site

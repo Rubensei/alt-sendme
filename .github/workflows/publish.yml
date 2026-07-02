@@ -22,19 +22,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: setup node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24.x'
-          cache: npm
+          cache: pnpm
 
       - name: Extract version from tag and validate
         id: version
         shell: bash
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
-          npm pkg set version="$VERSION"
-          npm run sync-version
+          pnpm pkg set version="$VERSION"
+          pnpm run sync-version
           node scripts/validate-version.js
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -170,11 +174,15 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: setup node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24.x'
-          cache: npm
+          cache: pnpm
 
       # Toolchain @rev = Rust version (see dtolnay/rust-toolchain README). Use full patch tag, not @1.91.
       # Quote targets so YAML does not treat the comma as a flow-sequence separator (only aarch64 was installed before).
@@ -213,13 +221,13 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ needs.prepare-release.outputs.version }}"
-          npm pkg set version="$VERSION"
-          npm run sync-version
+          pnpm pkg set version="$VERSION"
+          pnpm run sync-version
           node scripts/validate-version.js
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: install frontend dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       # Belt-and-suspenders: macOS builds need the relevant Apple targets on the active toolchain.
       - name: Ensure macOS targets
@@ -325,11 +333,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Set up Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24.x'
-          cache: npm
+          cache: pnpm
 
       - name: Set up JDK 17
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -380,13 +392,13 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ needs.prepare-release.outputs.version }}"
-          npm pkg set version="$VERSION"
-          npm run sync-version
+          pnpm pkg set version="$VERSION"
+          pnpm run sync-version
           node scripts/validate-version.js
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build release APKs (universal + per-ABI)
         env:
@@ -394,7 +406,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_APK_PROFILES: universal,arm64,armv7
-        run: npm run android:build:release
+        run: pnpm run android:build:release
 
       - name: Upload Android APKs to GitHub release
         shell: bash
