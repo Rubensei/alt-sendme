@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from '../../i18n/react-i18next-compat'
 import { handleExternalLinkClick } from '../../lib/openExternalUrl'
+import { IS_WEB } from '../../lib/platform'
 import { DONATE_LINK } from '../../lib/version'
 import { formatFileSize } from '../../lib/utils'
 import type { SuccessScreenProps } from '../../types/transfer'
@@ -159,7 +160,7 @@ export function TransferSuccessScreen({
 				</div>
 			</div>
 
-			{isReceiver && onOpenFolder ? (
+			{isReceiver && onOpenFolder && !IS_WEB ? (
 				<div className="flex gap-3 w-full max-w-sm">
 					<Button
 						type="button"

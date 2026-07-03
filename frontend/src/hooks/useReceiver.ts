@@ -1,4 +1,4 @@
-import { downloadDir, invoke, joinPath, listen, openDialog, revealItemInDir, type UnlistenFn } from '@/lib/platform-api'
+import { downloadDir, invoke, joinPath, listen, openDialog, pickDownloadDirectory, revealItemInDir, supportsWebSaveLocationPicker, type UnlistenFn } from '@/lib/platform-api'
 import { selectDownloadFolder } from '@/plugins/nativeUtils'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from '../i18n/react-i18next-compat'
@@ -10,7 +10,7 @@ import type {
 	TransferProgress,
 } from '../types/transfer'
 import { SpeedAverager, calculateETA } from '../utils/etaUtils'
-import { IS_ANDROID } from '@/lib/platform'
+import { IS_ANDROID, IS_WEB } from '@/lib/platform'
 import { isWebPreviewError } from '@/lib/web-preview-error'
 import { getRelayConfigArg } from '../lib/relay'
 import { useAppSettingStore } from '@/store/app-setting'
@@ -481,6 +481,11 @@ export function useReceiver(): UseReceiverReturn {
 				if (!response) return
 				selected = response.path
 				setDownloadsPath(selected)
+			} else if (IS_WEB) {
+				if (!supportsWebSaveLocationPicker()) {
+					return
+				}
+				selected = await pickDownloadDirectory()
 			} else {
 				const dialogSelection = await openDialog({
 					multiple: false,
@@ -559,7 +564,7 @@ export function useReceiver(): UseReceiverReturn {
 	}
 
 	const handleOpenFolder = async () => {
-		if (!savePath || folderOpenTriggeredRef.current) {
+		if (IS_WEB || !savePath || folderOpenTriggeredRef.current) {
 			return
 		}
 

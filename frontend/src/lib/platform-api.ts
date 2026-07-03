@@ -4,14 +4,14 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import {
 	ensureWasmBridge,
 	getWebSharingTicket,
-	triggerBrowserDownload,
 	wasmFetchTicketMetadata,
 	wasmReceiveFile,
 	wasmSendFile,
 	wasmStopSharing,
 } from './wasm-bridge-client'
 import { IS_TAURI, IS_WEB } from './platform'
-import { subscribeWebEvent } from './web-event-bus'
+import { dispatchWebEvent, subscribeWebEvent } from './web-event-bus'
+import { initWebSaveLocation, writeReceivedFile } from './web-save-location'
 import {
 	getWebFile,
 	isWebDirectory,
@@ -117,8 +117,12 @@ async function invokeWebTransfer<T>(
 				throw new Error('Ticket is required')
 			}
 
+			dispatchWebEvent('receive-started')
+
 			const { fileName, bytes } = await wasmReceiveFile(ticket)
-			triggerBrowserDownload(bytes, fileName)
+			dispatchWebEvent('receive-file-names', JSON.stringify([fileName]))
+
+			await writeReceivedFile(fileName, bytes)
 			return `Downloaded ${fileName}` as T
 		}
 		case 'stop_sharing':
@@ -308,8 +312,14 @@ export async function downloadDir(): Promise<string> {
 		return tauriDownloadDir()
 	}
 
-	return 'Downloads'
+	const saved = await initWebSaveLocation()
+	return saved || 'Browser downloads'
 }
+
+export {
+	pickDownloadDirectory,
+	supportsWebSaveLocationPicker,
+} from './web-save-location'
 
 export async function joinPath(...paths: string[]): Promise<string> {
 	if (IS_TAURI) {
