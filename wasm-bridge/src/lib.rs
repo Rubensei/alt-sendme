@@ -1,9 +1,9 @@
-//! WASM bridge: wasm-bindgen exports over the shared `engine` crate.
+//! WASM bridge: wasm-bindgen exports over `wasm-io` + `protocol`.
 
-use engine::{
-    fetch_metadata, set_wasm_secret_key, start_share_bytes, AddrInfoOptions, AppHandle,
-    EventEmitter, FileMetadata, ReceiveOptions, RelayModeOption, SendOptions, WasmReceiveResult,
-    WasmShareSession,
+use wasm_io::{
+    download_bytes, fetch_metadata, set_wasm_secret_key, start_share_bytes, AddrInfoOptions,
+    AppHandle, EventEmitter, FileMetadata, ReceiveOptions, RelayModeOption, SendOptions,
+    WasmReceiveResult, WasmShareSession,
 };
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -178,8 +178,6 @@ pub async fn fetch_ticket_metadata(ticket: String) -> Result<String, JsValue> {
 /// Download a single-file ticket into memory.
 #[wasm_bindgen]
 pub async fn receive_file(ticket: String) -> Result<WasmReceiveFileResult, JsValue> {
-    use engine::download_bytes;
-
     let options = ReceiveOptions {
         output_dir: None,
         relay_mode: RelayModeOption::Default,

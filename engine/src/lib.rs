@@ -1,24 +1,27 @@
-pub mod core;
-mod time_compat;
+//! # `engine` — stable public API for Tauri and integration tests
+//!
+//! ## Canonical imports
+//!
+//! ```ignore
+//! use engine::{
+//!     download, fetch_metadata, get_or_create_secret, start_share_items,
+//!     FileMetadata, ReceiveOptions, SendOptions, SendResult,
+//! };
+//! ```
+//!
+//! Desktop/mobile builds use the `native` platform crate (re-exported here).
+//! Browser transfer logic lives in `wasm-io` and is reached via the root-level
+//! `wasm-bridge` crate, not through this facade.
+//!
+//! Workspace layout: `protocol` (shared P2P logic) · `native` (disk I/O) · `wasm-io` (memory I/O).
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use core::{
-    receive::{download, fetch_metadata},
-    send::start_share,
-    send::start_share_items,
-    types::{
-        AddrInfoOptions, AppHandle, EventEmitter, FileMetadata, FilePreviewItem, ReceiveOptions,
-        ReceiveResult, RelayModeOption, SendOptions, SendResult,
-    },
-};
+pub use native::*;
 
 #[cfg(target_arch = "wasm32")]
-pub use core::{
-    receive::{download_bytes, fetch_metadata},
-    send::start_share_bytes,
-    types::{
-        set_wasm_secret_key, AddrInfoOptions, AppHandle, EventEmitter, FileMetadata,
-        FilePreviewItem, ReceiveOptions, RelayModeOption, SendOptions, WasmReceiveResult,
-        WasmShareSession,
-    },
+pub use wasm_io::*;
+
+/// Shared protocol helpers not re-exported by the platform crates.
+pub use protocol::{
+    download_to_store, run_share_session, DownloadToStoreResult, METADATA_ALPN, ShareSessionOutcome,
 };

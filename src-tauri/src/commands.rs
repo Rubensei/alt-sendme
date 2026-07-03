@@ -1,9 +1,8 @@
 use crate::features::thumbnail::generate_thumbnail;
 use crate::state::{AppStateMutex, ShareHandle};
 use engine::{
-    core::types::{get_or_create_secret, FileMetadata, FilePreviewItem},
-    download, fetch_metadata, AddrInfoOptions, AppHandle, EventEmitter, ReceiveOptions,
-    RelayModeOption, SendOptions,
+    download, fetch_metadata, get_or_create_secret, start_share_items, AddrInfoOptions, AppHandle,
+    EventEmitter, FileMetadata, FilePreviewItem, ReceiveOptions, RelayModeOption, SendOptions,
 };
 use iroh::{endpoint::presets, Endpoint};
 use n0_watcher::Watcher;
@@ -444,7 +443,7 @@ pub async fn send_items(
         let boxed_handle: AppHandle = Some(emitter);
 
         // Start sharing multiple files/folders via core send pipeline.
-        let result = engine::core::send::start_share_items(
+        let result = start_share_items(
             path_bufs.clone(),
             options,
             &boxed_handle,

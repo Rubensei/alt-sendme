@@ -1,13 +1,6 @@
-#[cfg(not(target_arch = "wasm32"))]
-use crate::core::export_native;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::core::storage;
-use crate::core::send::METADATA_ALPN;
-use crate::core::types::{
-    get_or_create_secret, AppHandle, FileMetadata, ReceiveOptions,
-};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::core::types::ReceiveResult;
+use crate::send::METADATA_ALPN;
+use crate::time_compat::{sleep, timeout, Duration, Instant};
+use crate::types::{get_or_create_secret, AppHandle, FileMetadata, ReceiveOptions};
 use iroh::endpoint::presets;
 #[cfg(not(target_arch = "wasm32"))]
 use iroh::{address_lookup::dns::DnsAddressLookup, Endpoint, TransportAddr};
@@ -19,14 +12,9 @@ use iroh_blobs::{
     get::{request::get_hash_seq_and_sizes, GetError, Stats},
     ticket::BlobTicket,
 };
-#[cfg(not(target_arch = "wasm32"))]
-use iroh_blobs::store::fs::FsStore;
-use crate::time_compat::{sleep, timeout, Duration, Instant};
 use n0_future::StreamExt;
 use std::str::FromStr;
 use tokio::io::AsyncReadExt;
-#[cfg(not(target_arch = "wasm32"))]
-use tokio::select;
 
 // Helper function to emit events through the app handle
 fn emit_event(app_handle: &AppHandle, event_name: &str) {
@@ -119,15 +107,15 @@ async fn receive_metadata<S: AsyncReadExt + Unpin>(
     Ok(metadata)
 }
 
-struct DownloadToStoreResult {
-    collection: Collection,
-    total_files: u64,
-    payload_size: u64,
-    stats: Stats,
+pub struct DownloadToStoreResult {
+    pub collection: Collection,
+    pub total_files: u64,
+    pub payload_size: u64,
+    pub stats: Stats,
 }
 
 /// Download ticket payload into the blob store (no filesystem export).
-async fn download_to_store(
+pub async fn download_to_store(
     ticket: BlobTicket,
     addr: iroh::EndpointAddr,
     endpoint: &Endpoint,
@@ -251,139 +239,6 @@ async fn download_to_store(
         payload_size,
         stats,
     })
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub async fn download(
-    ticket_str: String,
-    options: ReceiveOptions,
-    app_handle: AppHandle,
-) -> anyhow::Result<ReceiveResult> {
-    let ticket = BlobTicket::from_str(&ticket_str)?;
-
-    let addr = ticket.addr().clone();
-
-    let secret_key = get_or_create_secret()?;
-
-    let mut builder = Endpoint::builder(presets::Minimal)
-        .alpns(vec![])
-        .secret_key(secret_key)
-        .relay_mode(options.relay_mode.clone().into());
-
-    if ticket.addr().relay_urls().count() == 0 && ticket.addr().ip_addrs().count() == 0 {
-        builder = builder.address_lookup(DnsAddressLookup::n0_dns());
-    }
-    if let Some(addr) = options.magic_ipv4_addr {
-        builder = builder.bind_addr(addr)?;
-    }
-    if let Some(addr) = options.magic_ipv6_addr {
-        builder = builder.bind_addr(addr)?;
-    }
-
-    let endpoint = builder.bind().await?;
-
-    let (db, iroh_data_dir) =
-        storage::create_recv_store(&ticket.hash().to_hex().to_string()).await?;
-    let mut cleanup_guard = storage::recv_cleanup_guard(iroh_data_dir);
-    let db2 = db.clone();
-
-    let fut = async move {
-        let downloaded = download_to_store(ticket, addr, &endpoint, db.as_ref(), &app_handle).await?;
-
-        let output_dir = options.output_dir.unwrap_or_else(|| {
-            dirs::download_dir().unwrap_or_else(|| std::env::current_dir().unwrap())
-        });
-
-        let conflicts =
-            export_native::export_to_directory(&db, downloaded.collection, &output_dir).await?;
-
-        if !conflicts.is_empty() {
-            let payload = serde_json::to_string(&conflicts).unwrap_or_else(|_| "[]".to_string());
-            emit_event_with_payload(&app_handle, "receive-conflicts", &payload);
-        }
-
-        endpoint.close().await;
-
-        emit_event(&app_handle, "receive-completed");
-
-        anyhow::Ok((
-            downloaded.total_files,
-            downloaded.payload_size,
-            downloaded.stats,
-            output_dir,
-            conflicts.len(),
-        ))
-    };
-
-    let (total_files, payload_size, _stats, output_dir, conflict_count) = select! {
-        x = fut => match x {
-            Ok(x) => x,
-            Err(e) => {
-                tracing::error!("Download operation failed: {}", e);
-                cleanup_guard.disarm();
-                db2.shutdown().await?;
-                anyhow::bail!("error: {e}");
-            }
-        },
-        _ = tokio::signal::ctrl_c() => {
-            tracing::warn!("Operation cancelled by user");
-            db2.shutdown().await?;
-            anyhow::bail!("Operation cancelled");
-        }
-    };
-    let message = if conflict_count > 0 {
-        format!(
-            "Downloaded {} files, {} bytes ({} name conflicts auto-resolved)",
-            total_files, payload_size, conflict_count
-        )
-    } else {
-        format!("Downloaded {} files, {} bytes", total_files, payload_size)
-    };
-
-    Ok(ReceiveResult {
-        message,
-        file_path: output_dir,
-    })
-}
-
-/// Download a ticket into memory for the browser.
-#[cfg(target_arch = "wasm32")]
-pub async fn download_bytes(
-    ticket_str: String,
-    options: ReceiveOptions,
-    app_handle: AppHandle,
-) -> anyhow::Result<crate::core::types::WasmReceiveResult> {
-    use crate::core::export_wasm;
-    use crate::core::storage::create_recv_mem_store;
-    use crate::core::types::WasmReceiveResult;
-
-    let ticket = BlobTicket::from_str(&ticket_str)?;
-    let addr = ticket.addr().clone();
-    let secret_key = get_or_create_secret()?;
-
-    let builder = Endpoint::builder(presets::Minimal)
-        .alpns(vec![])
-        .secret_key(secret_key)
-        .relay_mode(options.relay_mode.clone().into());
-
-    anyhow::ensure!(
-        ticket.addr().relay_urls().count() > 0,
-        "browser receive requires relay addresses in the ticket"
-    );
-
-    let endpoint = builder.bind().await?;
-    let store = create_recv_mem_store();
-
-    let downloaded =
-        download_to_store(ticket, addr, &endpoint, store.as_ref(), &app_handle).await?;
-
-    let (file_name, bytes) =
-        export_wasm::export_single_file_bytes(store.as_ref(), downloaded.collection).await?;
-
-    endpoint.close().await;
-    emit_event(&app_handle, "receive-completed");
-
-    Ok(WasmReceiveResult { file_name, bytes })
 }
 
 /// # Description
@@ -534,66 +389,6 @@ pub async fn fetch_metadata(
     }
 
     Err(last_error.unwrap_or_else(|| anyhow::anyhow!("metadata fetch failed")))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_fetch_metadata_e2e() {
-        use crate::core::send::start_share;
-        use crate::core::types::{
-            AddrInfoOptions, FileMetadata, ReceiveOptions, RelayModeOption, SendOptions,
-        };
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        // Create a dummy file to share
-        let mut temp_file = NamedTempFile::new().unwrap();
-        write!(temp_file, "metadata e2e test content").unwrap();
-        let temp_path = temp_file.path().to_path_buf();
-
-        // Setup metadata
-        let expected_metadata = FileMetadata {
-            file_name: "test_e2e_file.txt".into(),
-            item_count: 1,
-            size: 25,
-            thumbnail: Some("data:image/jpeg;base64,e2e_test_thumbnail=".into()),
-            mime_type: Some("text/plain".into()),
-            items: None,
-        };
-
-        let send_opts = SendOptions {
-            relay_mode: RelayModeOption::Default,
-            ticket_type: AddrInfoOptions::RelayAndAddresses,
-            magic_ipv4_addr: None,
-            magic_ipv6_addr: None,
-        };
-
-        // Start share
-        let result = start_share(temp_path, send_opts, None, Some(expected_metadata.clone()))
-            .await
-            .expect("Failed to start share");
-
-        // Fetch metadata via ALPN protocol
-        let recv_opts = ReceiveOptions {
-            output_dir: None,
-            relay_mode: RelayModeOption::Default,
-            magic_ipv4_addr: None,
-            magic_ipv6_addr: None,
-        };
-
-        let fetched = fetch_metadata(result.ticket, recv_opts)
-            .await
-            .expect("Failed to fetch metadata from node");
-
-        // Verify received data matches exactly
-        assert_eq!(fetched.file_name, expected_metadata.file_name);
-        assert_eq!(fetched.size, expected_metadata.size);
-        assert_eq!(fetched.thumbnail, expected_metadata.thumbnail);
-        assert_eq!(fetched.mime_type, expected_metadata.mime_type);
-    }
 }
 
 fn show_get_error(e: GetError) -> GetError {

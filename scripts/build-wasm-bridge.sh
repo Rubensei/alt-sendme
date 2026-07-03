@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build engine-wasm for the browser (wasm32-unknown-unknown) and run wasm-bindgen.
+# Build wasm-bridge for the browser (wasm32-unknown-unknown) and run wasm-bindgen.
 #
 # ring (iroh tls-ring) compiles C code for wasm32; Apple clang does not support
 # that target. Use LLVM clang instead:
@@ -8,13 +8,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROFILE="debug"
-CARGO_ARGS=()
+CARGO_RELEASE=""
 
 for arg in "$@"; do
 	case "$arg" in
 	--release)
 		PROFILE="release"
-		CARGO_ARGS+=(--release)
+		CARGO_RELEASE="--release"
 		;;
 	esac
 done
@@ -27,11 +27,11 @@ if [[ -z "${CC:-}" ]]; then
 	fi
 fi
 
-cd "$ROOT/engine-wasm"
-export CARGO_TARGET_DIR="$ROOT/engine-wasm/target"
-cargo build --target wasm32-unknown-unknown "${CARGO_ARGS[@]}"
+cd "$ROOT/wasm-bridge"
+export CARGO_TARGET_DIR="$ROOT/wasm-bridge/target"
+cargo build --target wasm32-unknown-unknown $CARGO_RELEASE
 
-WASM_PATH="$CARGO_TARGET_DIR/wasm32-unknown-unknown/$PROFILE/engine_wasm.wasm"
+WASM_PATH="$CARGO_TARGET_DIR/wasm32-unknown-unknown/$PROFILE/wasm_bridge.wasm"
 OUT_DIR="$ROOT/frontend/src/wasm/pkg"
 
 if ! command -v wasm-bindgen >/dev/null 2>&1; then
@@ -43,7 +43,7 @@ mkdir -p "$OUT_DIR"
 wasm-bindgen "$WASM_PATH" \
 	--target web \
 	--out-dir "$OUT_DIR" \
-	--out-name engine_wasm \
+	--out-name wasm_bridge \
 	--typescript
 
 echo "WASM package written to $OUT_DIR"

@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::sync::Arc;
 
-// Import the EventEmitter trait - we'll define it here or import it
 #[cfg(not(target_arch = "wasm32"))]
 pub trait EventEmitter: Send + Sync {
     fn emit_event(&self, event_name: &str) -> Result<(), String>;
@@ -15,91 +13,8 @@ pub trait EventEmitter {
     fn emit_event_with_payload(&self, event_name: &str, payload: &str) -> Result<(), String>;
 }
 
-// Type alias for the app handle - we use Arc<dyn EventEmitter> to allow cloning and avoid direct tauri dependency in core
+/// Optional callback surface for transfer progress (Tauri events or JS callbacks).
 pub type AppHandle = Option<Arc<dyn EventEmitter>>;
-
-#[derive(Debug)]
-pub struct AutoCleanupDir {
-    path: PathBuf,
-    armed: bool,
-}
-
-impl AutoCleanupDir {
-    pub fn new(path: PathBuf) -> Self {
-        Self { path, armed: true }
-    }
-
-    pub fn path(&self) -> &std::path::Path {
-        &self.path
-    }
-
-    /// Skip cleanup on drop — used to hang on to a partial download so it can resume.
-    pub fn disarm(&mut self) {
-        self.armed = false;
-    }
-}
-
-impl Drop for AutoCleanupDir {
-    fn drop(&mut self) {
-        if !self.armed {
-            return;
-        }
-        let path = std::mem::take(&mut self.path);
-        let remove = move || {
-            if let Err(e) = std::fs::remove_dir_all(&path) {
-                tracing::warn!("Failed to cleanup directory {:?}: {}", path, e);
-            }
-        };
-        // Deleting a big dir can be slow, so hand it to a blocking thread rather
-        // than freezing the async runtime (or a lock we're holding). If there's
-        // no runtime around, just delete it here.
-        match tokio::runtime::Handle::try_current() {
-            Ok(handle) => {
-                handle.spawn_blocking(remove);
-            }
-            Err(_) => remove(),
-        }
-    }
-}
-
-pub struct SendResult {
-    pub ticket: String,
-    pub hash: String,
-    pub size: u64,
-    pub entry_type: String, // "file" or "directory"
-
-    // CRITICAL: These fields must be kept alive for the duration of the share
-    pub router: iroh::protocol::Router, // Keeps the server running and protocols active
-    pub temp_tag: iroh_blobs::api::TempTag, // Prevents data from being garbage collected
-    pub _progress_handle: n0_future::task::AbortOnDropHandle<anyhow::Result<()>>, // Keeps event channel open
-    #[cfg(not(target_arch = "wasm32"))]
-    pub _store: iroh_blobs::store::fs::FsStore, // Keeps the blob storage alive
-    pub blobs_data_dir: AutoCleanupDir,         // Drop last to cleanup after handles are released
-}
-
-/// Active browser share session (in-memory blob store).
-#[cfg(target_arch = "wasm32")]
-pub struct WasmShareSession {
-    pub ticket: String,
-    pub hash: String,
-    pub size: u64,
-    pub router: iroh::protocol::Router,
-    pub temp_tag: iroh_blobs::api::TempTag,
-    pub store: iroh_blobs::store::mem::MemStore,
-    pub _progress_handle: n0_future::task::AbortOnDropHandle<anyhow::Result<()>>,
-}
-
-#[cfg(target_arch = "wasm32")]
-pub struct WasmReceiveResult {
-    pub file_name: String,
-    pub bytes: Vec<u8>,
-}
-
-#[derive(Debug)]
-pub struct ReceiveResult {
-    pub message: String,
-    pub file_path: PathBuf,
-}
 
 #[derive(Debug, Default)]
 pub struct SendOptions {
@@ -111,7 +26,7 @@ pub struct SendOptions {
 
 #[derive(Debug, Default)]
 pub struct ReceiveOptions {
-    pub output_dir: Option<PathBuf>,
+    pub output_dir: Option<std::path::PathBuf>,
     pub relay_mode: RelayModeOption,
     pub magic_ipv4_addr: Option<std::net::SocketAddrV4>,
     pub magic_ipv6_addr: Option<std::net::SocketAddrV6>,
@@ -178,9 +93,6 @@ mod relay_mode_tests {
     }
 }
 
-/// # Description
-/// Represents metadata about a file being shared,
-/// including file_name, size, optional thumbnail, and MIME type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilePreviewItem {
     pub file_name: String,
@@ -225,13 +137,12 @@ pub enum AddrInfoOptions {
 }
 
 pub fn apply_options(addr: &mut iroh::EndpointAddr, opts: AddrInfoOptions) {
+    use iroh::TransportAddr;
     match opts {
         AddrInfoOptions::Id => {
             addr.addrs.clear();
         }
-        AddrInfoOptions::RelayAndAddresses => {
-            // nothing to do
-        }
+        AddrInfoOptions::RelayAndAddresses => {}
         AddrInfoOptions::Relay => {
             addr.addrs
                 .retain(|transport_addr| matches!(transport_addr, TransportAddr::Relay(_)));
@@ -245,7 +156,6 @@ pub fn apply_options(addr: &mut iroh::EndpointAddr, opts: AddrInfoOptions) {
 
 #[cfg(not(target_arch = "wasm32"))]
 use anyhow::Context;
-use iroh::TransportAddr;
 #[cfg(not(target_arch = "wasm32"))]
 use std::str::FromStr;
 

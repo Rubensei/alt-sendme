@@ -2,14 +2,14 @@ export type { UnlistenFn } from '@tauri-apps/api/event'
 
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import {
-	ensureEngineWasm,
+	ensureWasmBridge,
 	getWebSharingTicket,
 	triggerBrowserDownload,
 	wasmFetchTicketMetadata,
 	wasmReceiveFile,
 	wasmSendFile,
 	wasmStopSharing,
-} from './engine-wasm-client'
+} from './wasm-bridge-client'
 import { IS_TAURI, IS_WEB } from './platform'
 import { subscribeWebEvent } from './web-event-bus'
 import {
@@ -140,9 +140,9 @@ async function invokeWeb<T>(
 		case 'receive_file':
 		case 'stop_sharing':
 			try {
-				await ensureEngineWasm()
+				await ensureWasmBridge()
 			} catch (error) {
-				console.error('Failed to initialize engine-wasm:', error)
+				console.error('Failed to initialize wasm-bridge:', error)
 				webTransferUnavailable()
 			}
 			return invokeWebTransfer<T>(cmd, args)

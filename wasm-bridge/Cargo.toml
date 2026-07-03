@@ -1,19 +1,21 @@
 [package]
-name = "engine-wasm"
+name = "wasm-bridge"
 version = "0.1.0"
 edition = "2021"
 authors = ["Tony Antony <tonyantony300@gmail.com>"]
 license = "AGPL-3.0"
 repository = "https://github.com/tonyantony300/alt-sendme"
-description = "WebAssembly bridge for alt-sendme P2P file transfer (browser target)"
+description = "wasm-bindgen bridge: exposes alt-sendme transfer APIs to the browser"
 rust-version = "1.91"
 
 [lib]
+name = "wasm_bridge"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 console_error_panic_hook = "0.1"
-engine = { path = "../engine" }
+wasm-io = { path = "../engine/wasm-io", package = "sendme-wasm-io" }
+protocol = { path = "../engine/protocol", package = "sendme-protocol" }
 getrandom = { version = "0.3", features = ["wasm_js"] }
 iroh = { version = "1.0.0", default-features = false, features = ["tls-ring"] }
 js-sys = "0.3"

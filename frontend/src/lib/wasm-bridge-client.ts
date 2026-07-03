@@ -1,12 +1,12 @@
 import { dispatchWebEvent } from './web-event-bus'
 
-type EngineWasmModule = typeof import('../wasm/pkg/engine_wasm.js')
+type WasmBridgeModule = typeof import('../wasm/pkg/wasm_bridge.js')
 
-let initPromise: Promise<EngineWasmModule> | null = null
+let initPromise: Promise<WasmBridgeModule> | null = null
 let currentTicket: string | null = null
 
-async function loadEngineWasm(): Promise<EngineWasmModule> {
-	const wasm = await import('../wasm/pkg/engine_wasm.js')
+async function loadWasmBridge(): Promise<WasmBridgeModule> {
+	const wasm = await import('../wasm/pkg/wasm_bridge.js')
 	await wasm.default()
 
 	wasm.set_event_callback((eventName: string, payload: string | null | undefined) => {
@@ -16,9 +16,9 @@ async function loadEngineWasm(): Promise<EngineWasmModule> {
 	return wasm
 }
 
-export async function ensureEngineWasm(): Promise<EngineWasmModule> {
+export async function ensureWasmBridge(): Promise<WasmBridgeModule> {
 	if (!initPromise) {
-		initPromise = loadEngineWasm().catch((error) => {
+		initPromise = loadWasmBridge().catch((error) => {
 			initPromise = null
 			throw error
 		})
@@ -35,27 +35,27 @@ export async function wasmSendFile(
 	bytes: Uint8Array,
 	metadataJson?: string
 ): Promise<string> {
-	const wasm = await ensureEngineWasm()
+	const wasm = await ensureWasmBridge()
 	const result = await wasm.send_file(fileName, bytes, metadataJson ?? undefined)
 	currentTicket = result.ticket
 	return result.ticket
 }
 
 export async function wasmStopSharing(): Promise<void> {
-	const wasm = await ensureEngineWasm()
+	const wasm = await ensureWasmBridge()
 	wasm.stop_sharing()
 	currentTicket = null
 }
 
 export async function wasmFetchTicketMetadata(ticket: string): Promise<string> {
-	const wasm = await ensureEngineWasm()
+	const wasm = await ensureWasmBridge()
 	return wasm.fetch_ticket_metadata(ticket)
 }
 
 export async function wasmReceiveFile(
 	ticket: string
 ): Promise<{ fileName: string; bytes: Uint8Array }> {
-	const wasm = await ensureEngineWasm()
+	const wasm = await ensureWasmBridge()
 	const result = await wasm.receive_file(ticket)
 	return {
 		fileName: result.file_name,
