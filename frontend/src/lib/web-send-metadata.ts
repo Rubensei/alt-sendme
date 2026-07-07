@@ -42,9 +42,7 @@ function dedupName(name: string, seen: Map<string, number>): string {
 	return `${name} (${count})`
 }
 
-function buildPreviewItems(
-	paths: string[]
-): WebFilePreviewItem[] {
+function buildPreviewItems(paths: string[]): WebFilePreviewItem[] {
 	const seen = new Map<string, number>()
 	const items: WebFilePreviewItem[] = []
 

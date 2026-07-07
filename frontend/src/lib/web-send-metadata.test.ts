@@ -49,7 +49,10 @@ describe('buildWebSendMetadataForPaths', () => {
 		clearWebFiles()
 		registerWebDirectory('album')
 		registerWebFile('album/cover.jpg', makeFile('cover.jpg', 100, 'image/jpeg'))
-		registerWebFile('album/readme.txt', makeFile('readme.txt', 20, 'text/plain'))
+		registerWebFile(
+			'album/readme.txt',
+			makeFile('readme.txt', 20, 'text/plain')
+		)
 
 		const metadata = JSON.parse(buildWebSendMetadataForPaths(['album']))
 

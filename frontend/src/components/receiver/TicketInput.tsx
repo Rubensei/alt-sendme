@@ -183,9 +183,10 @@ export function TicketInput({
 	const saveLocationLabel = IS_WEB
 		? t('common:receiver.saveLocation')
 		: t('common:receiver.saveToFolder')
-	const noSaveLocationText = IS_WEB && !canPickSaveLocation
-		? t('common:receiver.browserDownloadsFallback')
-		: t('common:receiver.noFolderSelected')
+	const noSaveLocationText =
+		IS_WEB && !canPickSaveLocation
+			? t('common:receiver.browserDownloadsFallback')
+			: t('common:receiver.noFolderSelected')
 	const saveLocationHint =
 		IS_WEB && !canPickSaveLocation
 			? t('common:receiver.browserDownloadsHint')
@@ -212,7 +213,9 @@ export function TicketInput({
 					) : null}
 				</InputGroup>
 				{saveLocationHint ? (
-					<p className="mt-1.5 text-xs text-muted-foreground">{saveLocationHint}</p>
+					<p className="mt-1.5 text-xs text-muted-foreground">
+						{saveLocationHint}
+					</p>
 				) : null}
 			</div>
 

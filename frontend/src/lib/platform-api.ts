@@ -14,7 +14,10 @@ import {
 import type { RelayConfigArg } from './relay-config'
 import { IS_TAURI, IS_WEB } from './platform'
 import { dispatchWebEvent, subscribeWebEvent } from './web-event-bus'
-import { initWebSaveLocation, writeReceivedCollection } from './web-save-location'
+import {
+	initWebSaveLocation,
+	writeReceivedCollection,
+} from './web-save-location'
 import {
 	getWebFile,
 	isWebDirectory,
@@ -56,7 +59,9 @@ function webTransferUnavailable(): never {
 	)
 }
 
-function relayFromArgs(args?: Record<string, unknown>): RelayConfigArg | undefined {
+function relayFromArgs(
+	args?: Record<string, unknown>
+): RelayConfigArg | undefined {
 	const relay = args?.relay
 	if (relay && typeof relay === 'object') {
 		return relay as RelayConfigArg
@@ -248,7 +253,10 @@ export async function listen<T>(
 	handler: (event: { payload: T }) => void
 ): Promise<UnlistenFn> {
 	if (IS_WEB) {
-		return subscribeWebEvent(event, handler as (event: { payload: unknown }) => void)
+		return subscribeWebEvent(
+			event,
+			handler as (event: { payload: unknown }) => void
+		)
 	}
 
 	const { listen: tauriListen } = await import('@tauri-apps/api/event')
@@ -330,7 +338,9 @@ function pickPathsInBrowser(
 
 export async function downloadDir(): Promise<string> {
 	if (IS_TAURI) {
-		const { downloadDir: tauriDownloadDir } = await import('@tauri-apps/api/path')
+		const { downloadDir: tauriDownloadDir } = await import(
+			'@tauri-apps/api/path'
+		)
 		return tauriDownloadDir()
 	}
 

@@ -232,7 +232,10 @@ async fn e2e_same_ticket_resumes_after_cancel() {
     )
     .await;
 
-    assert!(partial_path.exists(), "partial store must exist before retry");
+    assert!(
+        partial_path.exists(),
+        "partial store must exist before retry"
+    );
 
     // Second attempt with same ticket: must succeed and produce the correct file.
     let (_cancel_tx2, cancel_rx2) = common::no_cancel();

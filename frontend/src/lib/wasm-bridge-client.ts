@@ -27,9 +27,11 @@ async function loadWasmBridge(): Promise<WasmBridgeModule> {
 	const wasm = await import('../wasm/pkg/wasm_bridge.js')
 	await wasm.default()
 
-	wasm.set_event_callback((eventName: string, payload: string | null | undefined) => {
-		dispatchWebEvent(eventName, payload ?? undefined)
-	})
+	wasm.set_event_callback(
+		(eventName: string, payload: string | null | undefined) => {
+			dispatchWebEvent(eventName, payload ?? undefined)
+		}
+	)
 
 	return wasm
 }
@@ -130,7 +132,10 @@ export async function wasmGetRelayStatus(
 	return JSON.parse(json) as RelayStatusResponse
 }
 
-export function triggerBrowserDownload(bytes: Uint8Array, fileName: string): void {
+export function triggerBrowserDownload(
+	bytes: Uint8Array,
+	fileName: string
+): void {
 	const copy = new Uint8Array(bytes)
 	const blob = new Blob([copy])
 	const url = URL.createObjectURL(blob)

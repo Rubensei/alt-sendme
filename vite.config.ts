@@ -33,13 +33,14 @@ export default defineConfig(({ mode }) => {
 			port: isWeb ? 3000 : 1420,
 			strictPort: true,
 			host: isWeb ? false : (tauriDevHost ?? false),
-			hmr: !isWeb && tauriDevHost
-				? {
-						protocol: 'ws',
-						host: tauriDevHost,
-						port: 1421,
-					}
-				: undefined,
+			hmr:
+				!isWeb && tauriDevHost
+					? {
+							protocol: 'ws',
+							host: tauriDevHost,
+							port: 1421,
+						}
+					: undefined,
 			watch: {
 				ignored: ['**/src-tauri/**'],
 				usePolling: true,

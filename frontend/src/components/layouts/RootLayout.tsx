@@ -4,7 +4,13 @@ import { AppFooter } from '../AppFooter'
 import { TitleBar } from '../TitleBar'
 import { useTranslation } from '@/i18n'
 import { AppUpdater } from '../common/AppUpdater'
-import { IS_ANDROID, IS_LINUX, IS_MACOS, IS_TAURI, IS_WEB } from '@/lib/platform'
+import {
+	IS_ANDROID,
+	IS_LINUX,
+	IS_MACOS,
+	IS_TAURI,
+	IS_WEB,
+} from '@/lib/platform'
 
 export function RootLayout() {
 	const { t } = useTranslation('common')

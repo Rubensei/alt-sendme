@@ -5,10 +5,7 @@ import {
 	registerWebDirectory,
 	registerWebFile,
 } from './web-file-store.js'
-import {
-	collectWebSendPayload,
-	webSendEntryType,
-} from './web-send-items.js'
+import { collectWebSendPayload, webSendEntryType } from './web-send-items.js'
 
 function makeFile(
 	name: string,

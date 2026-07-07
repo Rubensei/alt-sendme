@@ -1,4 +1,14 @@
-import { downloadDir, invoke, joinPath, listen, openDialog, pickDownloadDirectory, revealItemInDir, supportsWebSaveLocationPicker, type UnlistenFn } from '@/lib/platform-api'
+import {
+	downloadDir,
+	invoke,
+	joinPath,
+	listen,
+	openDialog,
+	pickDownloadDirectory,
+	revealItemInDir,
+	supportsWebSaveLocationPicker,
+	type UnlistenFn,
+} from '@/lib/platform-api'
 import { selectDownloadFolder } from '@/plugins/nativeUtils'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from '../i18n/react-i18next-compat'
@@ -548,7 +558,11 @@ export function useReceiver(): UseReceiverReturn {
 			// "cancelled" is the exact string the backend returns for user-initiated stops.
 			// Check for the exact Tauri-wrapped form so we don't accidentally swallow
 			// unrelated errors whose messages happen to contain the word.
-			if (String(error) === 'cancelled' || String(error).endsWith(': cancelled')) return
+			if (
+				String(error) === 'cancelled' ||
+				String(error).endsWith(': cancelled')
+			)
+				return
 
 			console.error('Failed to receive file:', error)
 			showAlert(

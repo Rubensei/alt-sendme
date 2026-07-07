@@ -254,7 +254,9 @@ export async function writeReceivedCollection(
 	}
 
 	const isSimpleSingleFile =
-		files.length === 1 && !files[0].name.includes('/') && !files[0].name.includes('\\')
+		files.length === 1 &&
+		!files[0].name.includes('/') &&
+		!files[0].name.includes('\\')
 
 	if (cachedDirHandle) {
 		const allowed = await ensureDirWritePermission(cachedDirHandle)

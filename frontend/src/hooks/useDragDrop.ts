@@ -1,13 +1,7 @@
 import { getCurrentWindow, invoke, openDialog } from '@/lib/platform-api'
 import { processWebDataTransfer } from '@/lib/web-drag-drop'
 import { selectSendDocument, selectSendFolder } from '@/plugins/nativeUtils'
-import {
-	useCallback,
-	useEffect,
-	useRef,
-	useState,
-	type DragEvent,
-} from 'react'
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { useTranslation } from '../i18n/react-i18next-compat'
 import type { AlertDialogState, AlertType } from '../types/ui'
 import { IS_ANDROID, IS_TAURI, IS_WEB } from '@/lib/platform'

@@ -150,14 +150,9 @@ pub async fn send_items(
         let boxed_handle: AppHandle = Some(emitter);
 
         // Start sharing multiple files/folders via core send pipeline.
-        let result = start_share_items(
-            path_bufs.clone(),
-            options,
-            &boxed_handle,
-            Some(metadata),
-        )
-        .await
-        .map_err(|e| format!("Failed to start sharing: {}", e))?;
+        let result = start_share_items(path_bufs.clone(), options, &boxed_handle, Some(metadata))
+            .await
+            .map_err(|e| format!("Failed to start sharing: {}", e))?;
         if let Some(payload) = relay_fallback_event_payload("send", fell_back_to_public) {
             // Surface the selected custom->public fallback once the share has
             // actually started with the resolved relay mode.
@@ -339,8 +334,7 @@ pub async fn receive_file(
         let stale_hash = state.lock().await.last_cancelled_recv_hash.take();
         if let Some(stale_hash) = stale_hash {
             if &stale_hash != new_hash {
-                let stale_dir = std::env::temp_dir()
-                    .join(format!(".sendme-recv-{}", stale_hash));
+                let stale_dir = std::env::temp_dir().join(format!(".sendme-recv-{}", stale_hash));
                 if stale_dir.exists() {
                     if let Err(e) = tokio::fs::remove_dir_all(&stale_dir).await {
                         tracing::warn!("Failed to remove stale partial recv store: {}", e);

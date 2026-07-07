@@ -268,12 +268,12 @@
 		min-height: 0;
 	}
 
-	body.web-app-shell [data-slot='sidebar-wrapper'] {
+	body.web-app-shell [data-slot="sidebar-wrapper"] {
 		height: 100%;
 		min-height: 0;
 	}
 
-	body.web-app-shell [data-slot='sidebar-container'] {
+	body.web-app-shell [data-slot="sidebar-container"] {
 		height: 100%;
 	}
 
