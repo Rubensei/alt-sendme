@@ -6,10 +6,11 @@ const host = process.env.TAURI_DEV_HOST
 
 export default defineConfig(({ mode }) => {
 	const isWeb = mode === 'web'
+	const webBase = process.env.WEB_BASE ?? '/web/'
 
 	return {
 		plugins: [react()],
-		base: isWeb ? '/web/' : '/',
+		base: isWeb ? webBase : '/',
 		root: path.resolve(__dirname, './frontend'),
 		resolve: {
 			alias: {
