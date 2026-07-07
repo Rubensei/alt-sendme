@@ -311,9 +311,12 @@ pub async fn receive_file(
     ticket: String,
     output_path: String,
     relay: Option<RelayConfigArg>,
+    state: State<'_, AppStateMutex>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
-    // Create receive options with user-specified output path
+    use iroh_blobs::ticket::BlobTicket;
+    use std::str::FromStr;
+
     let output_dir = PathBuf::from(output_path);
     let (relay_mode, fell_back_to_public) = resolve_relay_mode_with_fallback(relay).await?;
     let options = ReceiveOptions {
@@ -323,25 +326,94 @@ pub async fn receive_file(
         magic_ipv6_addr: None,
     };
 
-    // Wrap the app_handle in our EventEmitter implementation
+    // Derive the content hash so we can manage partial store lifecycle.
+    let incoming_hash = BlobTicket::from_str(&ticket)
+        .ok()
+        .map(|t| t.hash().to_hex().to_string());
+
+    // If a previous cancel left a partial store for a *different* hash, delete it now.
+    // Same hash → keep it for resume. Different hash → it would never be reused.
+    // Only act when we know the new hash; if the ticket is unparseable, leave the
+    // stale entry intact so the next valid attempt can still clean it up.
+    if let Some(ref new_hash) = incoming_hash {
+        let stale_hash = state.lock().await.last_cancelled_recv_hash.take();
+        if let Some(stale_hash) = stale_hash {
+            if &stale_hash != new_hash {
+                let stale_dir = std::env::temp_dir()
+                    .join(format!(".sendme-recv-{}", stale_hash));
+                if stale_dir.exists() {
+                    if let Err(e) = tokio::fs::remove_dir_all(&stale_dir).await {
+                        tracing::warn!("Failed to remove stale partial recv store: {}", e);
+                    } else {
+                        tracing::info!("Removed stale partial recv store for hash {}", stale_hash);
+                    }
+                }
+            }
+        }
+    }
+
     let emitter = Arc::new(TauriEventEmitter {
         app_handle: app_handle.clone(),
     });
     let boxed_handle: AppHandle = Some(emitter);
 
     if let Some(payload) = relay_fallback_event_payload("receive", fell_back_to_public) {
-        // Notify before the receive path starts using the resolved public relay.
         let _ = app_handle.emit("relay-fell-back", payload);
     }
 
-    // Download using the core library
-    match download(ticket, options, boxed_handle).await {
-        Ok(result) => Ok(result.message),
+    // Create a cancel channel and store the sender so cancel_receive can fire it.
+    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+    {
+        let mut app_state = state.lock().await;
+        app_state.current_receive_cancel = Some(cancel_tx);
+    }
+
+    let result = download(ticket, options, boxed_handle, cancel_rx).await;
+
+    // Update state based on outcome.
+    {
+        let mut app_state = state.lock().await;
+        app_state.current_receive_cancel = None;
+        match &result {
+            Err(e) if e.to_string() == "cancelled" => {
+                // Record the hash so the next receive can decide whether to delete this partial.
+                app_state.last_cancelled_recv_hash = incoming_hash;
+            }
+            Ok(_) | Err(_) => {
+                // Success deletes the store automatically (armed guard).
+                // Network errors keep the partial for same-session retry — treated the
+                // same as cancel from the user's perspective re: cleanup.
+                if result.is_err() {
+                    app_state.last_cancelled_recv_hash = incoming_hash;
+                }
+            }
+        }
+    }
+
+    match result {
+        Ok(r) => Ok(r.message),
+        Err(e) if e.to_string() == "cancelled" => {
+            // User-initiated cancellation — not an error from the UI's perspective.
+            Err("cancelled".to_string())
+        }
         Err(e) => {
             tracing::error!("Failed to receive file: {}", e);
             Err(format!("Failed to receive file: {}", e))
         }
     }
+}
+
+/// Cancel the currently active receive, if any.
+/// Partial data is preserved on disk so the transfer can be resumed.
+#[tauri::command]
+pub async fn cancel_receive(state: State<'_, AppStateMutex>) -> Result<(), String> {
+    let mut app_state = state.lock().await;
+    if let Some(tx) = app_state.current_receive_cancel.take() {
+        // Sending () signals the download future to stop. If the receiver is
+        // already gone (download finished first) this is a harmless no-op.
+        let _ = tx.send(());
+    }
+    Ok(())
 }
 
 /// Get the current sharing status
