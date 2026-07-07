@@ -2,11 +2,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
 
-const host = process.env.TAURI_DEV_HOST
+const tauriDevHost = process.env.TAURI_DEV_HOST
 
 export default defineConfig(({ mode }) => {
 	const isWeb = mode === 'web'
-	const webBase = process.env.WEB_BASE ?? '/web/'
+	const webBase = process.env.WEB_BASE ?? '/'
 
 	return {
 		plugins: [react()],
@@ -30,14 +30,14 @@ export default defineConfig(({ mode }) => {
 		clearScreen: false,
 		// 2. tauri expects a fixed port, fail if that port is not available
 		server: {
-			port: isWeb ? 3001 : 1420,
+			port: isWeb ? 3000 : 1420,
 			strictPort: true,
-			host: host || false,
-			hmr: host
+			host: isWeb ? false : (tauriDevHost ?? false),
+			hmr: !isWeb && tauriDevHost
 				? {
 						protocol: 'ws',
-						host,
-						port: isWeb ? 3002 : 1421,
+						host: tauriDevHost,
+						port: 1421,
 					}
 				: undefined,
 			watch: {
@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => {
 			},
 		},
 		preview: {
-			port: isWeb ? 3001 : 4173,
+			port: isWeb ? 3000 : 4173,
 			strictPort: true,
 		},
 	}
