@@ -65,6 +65,25 @@ export async function wasmSendFile(
 	return result.ticket
 }
 
+export async function wasmSendItems(
+	names: string[],
+	bytesList: Uint8Array[],
+	entryType: 'file' | 'directory' | 'collection',
+	metadataJson: string,
+	relay?: RelayConfigArg
+): Promise<string> {
+	const wasm = await ensureWasmBridge()
+	const result = await wasm.send_items(
+		names,
+		bytesList,
+		entryType,
+		metadataJson,
+		relayJson(relay)
+	)
+	currentTicket = result.ticket
+	return result.ticket
+}
+
 export async function wasmStopSharing(): Promise<void> {
 	const wasm = await ensureWasmBridge()
 	wasm.stop_sharing()
@@ -82,13 +101,17 @@ export async function wasmFetchTicketMetadata(
 export async function wasmReceiveFile(
 	ticket: string,
 	relay?: RelayConfigArg
-): Promise<{ fileName: string; bytes: Uint8Array }> {
+): Promise<{ fileNames: string[]; bytesList: Uint8Array[] }> {
 	const wasm = await ensureWasmBridge()
 	const result = await wasm.receive_file(ticket, relayJson(relay))
-	return {
-		fileName: result.file_name,
-		bytes: new Uint8Array(result.bytes),
+	const fileNames = result.file_names
+	const bytesList: Uint8Array[] = []
+
+	for (let index = 0; index < result.bytesArray.length; index++) {
+		bytesList.push(new Uint8Array(result.bytesArray[index]))
 	}
+
+	return { fileNames, bytesList }
 }
 
 export async function wasmVerifyRelays(

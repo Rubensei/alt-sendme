@@ -1,9 +1,9 @@
 //! WASM bridge: wasm-bindgen exports over `wasm-io` + `protocol`.
 
 use wasm_io::{
-    download_bytes, fetch_metadata, start_share_bytes, AddrInfoOptions, AppHandle, EventEmitter,
-    FileMetadata, ReceiveOptions, RelayModeOption, SendOptions, WasmReceiveResult,
-    WasmShareSession,
+    download_files, fetch_metadata, start_share_bytes, start_share_items_bytes,
+    AddrInfoOptions, AppHandle, EventEmitter, FileMetadata, ReceiveOptions, RelayModeOption,
+    SendOptions, WasmReceiveResult, WasmShareSession,
 };
 use protocol::{
     get_relay_status as engine_get_relay_status, resolve_relay_mode_with_fallback,
@@ -130,21 +130,50 @@ impl WasmSendResult {
 
 #[wasm_bindgen]
 pub struct WasmReceiveFileResult {
-    file_name: String,
-    bytes: Vec<u8>,
+    file_names: Vec<String>,
+    bytes_js: js_sys::Array,
 }
 
 #[wasm_bindgen]
 impl WasmReceiveFileResult {
     #[wasm_bindgen(getter)]
+    pub fn file_names(&self) -> Vec<String> {
+        self.file_names.clone()
+    }
+
+    #[wasm_bindgen(getter, js_name = bytesArray)]
+    pub fn bytes_array(&self) -> js_sys::Array {
+        self.bytes_js.clone()
+    }
+
+    #[wasm_bindgen(getter)]
     pub fn file_name(&self) -> String {
-        self.file_name.clone()
+        self.file_names
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "download".to_string())
     }
 
     #[wasm_bindgen(getter)]
     pub fn bytes(&self) -> Vec<u8> {
-        self.bytes.clone()
+        if self.bytes_js.length() == 0 {
+            return Vec::new();
+        }
+
+        let uint8 = js_sys::Uint8Array::new(&self.bytes_js.get(0));
+        let mut bytes = vec![0u8; uint8.length() as usize];
+        uint8.copy_to(&mut bytes);
+        bytes
     }
+}
+
+fn files_to_js_array(files: &[(String, Vec<u8>)]) -> js_sys::Array {
+    let array = js_sys::Array::new();
+    for (_, bytes) in files {
+        let uint8 = js_sys::Uint8Array::from(bytes.as_slice());
+        array.push(&uint8);
+    }
+    array
 }
 
 /// Share a single in-memory file (relay-only ticket).
@@ -182,6 +211,95 @@ pub async fn send_file(
     Ok(result)
 }
 
+fn parse_send_items(
+    names: &js_sys::Array,
+    bytes_array: &js_sys::Array,
+) -> Result<Vec<(String, Vec<u8>)>, JsValue> {
+    if names.length() != bytes_array.length() {
+        return Err(JsValue::from_str(
+            "names and bytes arrays must have the same length",
+        ));
+    }
+
+    let mut items = Vec::with_capacity(names.length() as usize);
+    for index in 0..names.length() {
+        let name = names
+            .get(index)
+            .as_string()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| JsValue::from_str("each item must have a non-empty name"))?;
+
+        let bytes_value = bytes_array.get(index);
+        if bytes_value.is_undefined() || bytes_value.is_null() {
+            return Err(JsValue::from_str("each item must include file bytes"));
+        }
+
+        let uint8 = js_sys::Uint8Array::new(&bytes_value);
+        let mut bytes = vec![0u8; uint8.length() as usize];
+        uint8.copy_to(&mut bytes);
+        items.push((name, bytes));
+    }
+
+    Ok(items)
+}
+
+/// Share one or more in-memory files or folders (relay-only ticket).
+#[wasm_bindgen]
+pub async fn send_items(
+    names: js_sys::Array,
+    bytes_array: js_sys::Array,
+    entry_type: String,
+    metadata_json: Option<String>,
+    relay_json: Option<String>,
+) -> Result<WasmSendResult, JsValue> {
+    let items = parse_send_items(&names, &bytes_array)?;
+    if items.is_empty() {
+        return Err(JsValue::from_str("no files provided"));
+    }
+
+    let metadata = match metadata_json {
+        Some(json) => Some(serde_json::from_str::<FileMetadata>(&json).map_err(js_err)?),
+        None => None,
+    };
+
+    let relay_mode = resolve_relay_mode(relay_json).await?;
+    let options = SendOptions {
+        relay_mode,
+        ticket_type: AddrInfoOptions::Relay,
+        magic_ipv4_addr: None,
+        magic_ipv6_addr: None,
+    };
+
+    let session = if items.len() == 1 && entry_type == "file" {
+        let (file_name, bytes) = items
+            .into_iter()
+            .next()
+            .expect("validated non-empty items");
+        start_share_bytes(file_name, bytes, options, &app_handle(), metadata)
+            .await
+            .map_err(js_err)?
+    } else {
+        start_share_items_bytes(
+            items,
+            entry_type,
+            options,
+            &app_handle(),
+            metadata,
+        )
+        .await
+        .map_err(js_err)?
+    };
+
+    let result = WasmSendResult {
+        ticket: session.ticket.clone(),
+        hash: session.hash.clone(),
+        size: session.size,
+    };
+
+    *share_slot().lock().expect("share session mutex poisoned") = Some(session);
+    Ok(result)
+}
+
 /// Stop the active browser share session, if any.
 #[wasm_bindgen]
 pub fn stop_sharing() {
@@ -206,7 +324,7 @@ pub async fn fetch_ticket_metadata(
     serde_json::to_string(&metadata).map_err(js_err)
 }
 
-/// Download a single-file ticket into memory.
+/// Download a ticket into memory (single file or folder collection).
 #[wasm_bindgen]
 pub async fn receive_file(
     ticket: String,
@@ -220,10 +338,16 @@ pub async fn receive_file(
         magic_ipv6_addr: None,
     };
 
-    let WasmReceiveResult { file_name, bytes } =
-        download_bytes(ticket, options, app_handle()).await.map_err(js_err)?;
+    let WasmReceiveResult { files } =
+        download_files(ticket, options, app_handle()).await.map_err(js_err)?;
 
-    Ok(WasmReceiveFileResult { file_name, bytes })
+    let file_names = files.iter().map(|(name, _)| name.clone()).collect();
+    let bytes_js = files_to_js_array(&files);
+
+    Ok(WasmReceiveFileResult {
+        file_names,
+        bytes_js,
+    })
 }
 
 /// Verify connectivity to configured relay servers. Returns JSON (`VerifyRelaysResponse`).

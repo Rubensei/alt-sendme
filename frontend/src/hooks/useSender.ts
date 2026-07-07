@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { invoke, listen, type UnlistenFn } from '@/lib/platform-api'
-import { isWebPreviewError } from '@/lib/web-preview-error'
+import {
+	getWebPreviewErrorMessage,
+	isWebPreviewError,
+} from '@/lib/web-preview-error'
 import { useTranslation } from '../i18n/react-i18next-compat'
 import type { AlertType } from '../types/ui'
 import type { TransferMetadata, TransferProgress } from '../types/transfer'
@@ -650,7 +653,10 @@ export function useSender(): UseSenderReturn {
 			showAlert(
 				t('common:errors.sharingFailed'),
 				isWebPreviewError(error)
-					? t('common:webPreview.transferUnavailable')
+					? getWebPreviewErrorMessage(
+							error,
+							t('common:webPreview.transferUnavailable')
+						)
 					: `${t('common:errors.sharingFailedDesc')}: ${error}`,
 				'error'
 			)

@@ -39,12 +39,18 @@ export function webFilePathKey(file: File): string {
 
 /** All registered files whose path equals `path` or lives under `path/`. */
 export function listWebFilesUnderPath(path: string): File[] {
+	return listWebFileEntriesUnderPath(path).map((entry) => entry.file)
+}
+
+export function listWebFileEntriesUnderPath(
+	path: string
+): Array<{ path: string; file: File }> {
 	const prefix = `${path}/`
-	const files: File[] = []
+	const entries: Array<{ path: string; file: File }> = []
 	for (const [filePath, file] of filesByPath) {
 		if (filePath === path || filePath.startsWith(prefix)) {
-			files.push(file)
+			entries.push({ path: filePath, file })
 		}
 	}
-	return files
+	return entries
 }

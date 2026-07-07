@@ -7,23 +7,24 @@ import {
 	wasmFetchTicketMetadata,
 	wasmGetRelayStatus,
 	wasmReceiveFile,
-	wasmSendFile,
+	wasmSendItems,
 	wasmStopSharing,
 	wasmVerifyRelays,
 } from './wasm-bridge-client'
 import type { RelayConfigArg } from './relay-config'
 import { IS_TAURI, IS_WEB } from './platform'
 import { dispatchWebEvent, subscribeWebEvent } from './web-event-bus'
-import { initWebSaveLocation, writeReceivedFile } from './web-save-location'
+import { initWebSaveLocation, writeReceivedCollection } from './web-save-location'
 import {
 	getWebFile,
 	isWebDirectory,
+	listWebFileEntriesUnderPath,
 	registerWebDirectory,
 	registerWebFile,
 	webFilePathKey,
 } from './web-file-store'
 import { WebPreviewError } from './web-preview-error'
-import { buildWebSendMetadataForPaths } from './web-send-metadata'
+import { collectWebSendPayload } from './web-send-items'
 
 type DialogOptions = {
 	multiple?: boolean
@@ -83,34 +84,16 @@ async function invokeWebTransfer<T>(
 					? [String(args?.path ?? '')]
 					: ((args?.paths as string[] | undefined) ?? [])
 
-			if (paths.length !== 1) {
-				throw new WebPreviewError(
-					'Web transfers support a single file at a time.'
-				)
-			}
-
-			const path = paths[0]
-			if (!path) {
+			if (!paths.length || paths.some((path) => !path)) {
 				throw new Error('No file selected')
 			}
-			if (isWebDirectory(path)) {
-				throw new WebPreviewError(
-					'Folder sharing is not available in the browser yet.'
-				)
-			}
 
-			const file = getWebFile(path)
-			if (!file) {
-				throw new WebPreviewError(
-					'Selected file is no longer available. Please choose the file again.'
-				)
-			}
-
-			const bytes = new Uint8Array(await file.arrayBuffer())
-			const ticket = await wasmSendFile(
-				file.name,
-				bytes,
-				buildWebSendMetadataForPaths([path]),
+			const payload = await collectWebSendPayload(paths)
+			const ticket = await wasmSendItems(
+				payload.names,
+				payload.bytesList,
+				payload.entryType,
+				payload.metadataJson,
 				relayFromArgs(args)
 			)
 			return ticket as T
@@ -121,16 +104,40 @@ async function invokeWebTransfer<T>(
 				throw new Error('Ticket is required')
 			}
 
-			dispatchWebEvent('receive-started')
-
-			const { fileName, bytes } = await wasmReceiveFile(
+			const { fileNames, bytesList } = await wasmReceiveFile(
 				ticket,
 				relayFromArgs(args)
 			)
-			dispatchWebEvent('receive-file-names', JSON.stringify([fileName]))
 
-			await writeReceivedFile(fileName, bytes)
-			return `Downloaded ${fileName}` as T
+			if (fileNames.length !== bytesList.length) {
+				throw new Error('Received file payload was incomplete')
+			}
+
+			const files = fileNames.map((name, index) => ({
+				name,
+				bytes: bytesList[index]!,
+			}))
+
+			const writeResult = await writeReceivedCollection(files)
+
+			if (writeResult.conflicts.length > 0) {
+				dispatchWebEvent(
+					'receive-conflicts',
+					JSON.stringify(writeResult.conflicts)
+				)
+			}
+
+			dispatchWebEvent('receive-completed')
+
+			if (files.length === 1) {
+				return `Downloaded ${files[0]!.name}` as T
+			}
+
+			if (writeResult.zippedDownload) {
+				return `Downloaded ${files.length} files as a ZIP archive` as T
+			}
+
+			return `Downloaded ${files.length} files` as T
 		}
 		case 'stop_sharing':
 			await wasmStopSharing()
@@ -200,7 +207,16 @@ function invokeWebStub<T>(cmd: string, args?: Record<string, unknown>): T {
 		case 'get_file_size': {
 			const path = String(args?.path ?? '')
 			const file = getWebFile(path)
-			return (file?.size ?? 0) as T
+			if (file) {
+				return file.size as T
+			}
+			if (isWebDirectory(path)) {
+				return listWebFileEntriesUnderPath(path).reduce(
+					(total, entry) => total + entry.file.size,
+					0
+				) as T
+			}
+			return 0 as T
 		}
 		case 'get_sharing_status':
 			return getWebSharingTicket() as T
@@ -280,10 +296,9 @@ function pickPathsInBrowser(
 			if (options.directory) {
 				const topLevel = new Set<string>()
 				for (const file of Array.from(files)) {
-					const relativePath =
-						(file as File & { webkitRelativePath?: string })
-							.webkitRelativePath ?? file.name
-					const [root] = relativePath.split('/')
+					const path = webFilePathKey(file)
+					registerWebFile(path, file)
+					const [root] = path.split('/')
 					if (root) topLevel.add(root)
 				}
 				const folders = [...topLevel]

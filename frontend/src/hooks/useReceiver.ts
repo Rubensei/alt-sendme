@@ -11,7 +11,10 @@ import type {
 } from '../types/transfer'
 import { SpeedAverager, calculateETA } from '../utils/etaUtils'
 import { IS_ANDROID, IS_WEB } from '@/lib/platform'
-import { isWebPreviewError } from '@/lib/web-preview-error'
+import {
+	getWebPreviewErrorMessage,
+	isWebPreviewError,
+} from '@/lib/web-preview-error'
 import { getRelayConfigArg } from '../lib/relay'
 import { useAppSettingStore } from '@/store/app-setting'
 
@@ -536,7 +539,10 @@ export function useReceiver(): UseReceiverReturn {
 			showAlert(
 				t('common:errors.receiveFailed'),
 				isWebPreviewError(error)
-					? t('common:webPreview.transferUnavailable')
+					? getWebPreviewErrorMessage(
+							error,
+							t('common:webPreview.transferUnavailable')
+						)
 					: String(error),
 				'error'
 			)

@@ -6,19 +6,11 @@ use iroh::Endpoint;
 use iroh_blobs::ticket::BlobTicket;
 use std::str::FromStr;
 
-use crate::export::export_single_file_bytes;
+use crate::export::export_collection_bytes;
 use crate::storage::create_recv_mem_store;
 use crate::types::WasmReceiveResult;
 
-fn emit_event(app_handle: &AppHandle, event_name: &str) {
-    if let Some(handle) = app_handle {
-        if let Err(e) = handle.emit_event(event_name) {
-            tracing::warn!("Failed to emit event {}: {}", event_name, e);
-        }
-    }
-}
-
-pub async fn download_bytes(
+pub async fn download_files(
     ticket_str: String,
     options: ReceiveOptions,
     app_handle: AppHandle,
@@ -43,11 +35,18 @@ pub async fn download_bytes(
     let downloaded =
         download_to_store(ticket, addr, &endpoint, store.as_ref(), &app_handle).await?;
 
-    let (file_name, bytes) =
-        export_single_file_bytes(store.as_ref(), downloaded.collection).await?;
+    let files = export_collection_bytes(store.as_ref(), downloaded.collection).await?;
 
     endpoint.close().await;
-    emit_event(&app_handle, "receive-completed");
 
-    Ok(WasmReceiveResult { file_name, bytes })
+    Ok(WasmReceiveResult { files })
+}
+
+/// Deprecated alias kept for internal callers migrating to [`download_files`].
+pub async fn download_bytes(
+    ticket_str: String,
+    options: ReceiveOptions,
+    app_handle: AppHandle,
+) -> anyhow::Result<WasmReceiveResult> {
+    download_files(ticket_str, options, app_handle).await
 }

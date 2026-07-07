@@ -1,4 +1,3 @@
-use protocol::AppHandle;
 use iroh_blobs::api::TempTag;
 use iroh_blobs::store::mem::MemStore;
 use n0_future::task::AbortOnDropHandle;
@@ -14,6 +13,5 @@ pub struct WasmShareSession {
 }
 
 pub struct WasmReceiveResult {
-    pub file_name: String,
-    pub bytes: Vec<u8>,
+    pub files: Vec<(String, Vec<u8>)>,
 }

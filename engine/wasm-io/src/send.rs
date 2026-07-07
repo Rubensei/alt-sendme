@@ -10,7 +10,7 @@ use iroh_blobs::{
 };
 use tokio::sync::mpsc;
 
-use crate::import::import_single_file_bytes;
+use crate::import::{import_named_bytes_collection, import_single_file_bytes};
 use crate::storage::create_send_mem_store;
 use crate::types::WasmShareSession;
 
@@ -58,6 +58,67 @@ pub async fn start_share_bytes(
         ticket_type,
         app_handle,
         "file".to_string(),
+        relay_mode,
+        None,
+        progress_rx,
+    )
+    .await?;
+
+    Ok(WasmShareSession {
+        ticket: outcome.ticket,
+        hash: outcome.hash,
+        size: outcome.size,
+        router: outcome.router,
+        temp_tag: outcome.temp_tag,
+        store: outcome.store,
+        _progress_handle: outcome.progress_handle,
+    })
+}
+
+pub async fn start_share_items_bytes(
+    items: Vec<(String, Vec<u8>)>,
+    entry_type: String,
+    options: SendOptions,
+    app_handle: &AppHandle,
+    metadata: Option<FileMetadata>,
+) -> anyhow::Result<WasmShareSession> {
+    let secret_key = get_or_create_secret()?;
+    let relay_mode: RelayMode = options.relay_mode.clone().into();
+    let ticket_type = AddrInfoOptions::Relay;
+
+    let builder = Endpoint::builder(presets::N0)
+        .alpns(vec![iroh_blobs::ALPN.to_vec(), METADATA_ALPN.to_vec()])
+        .secret_key(secret_key)
+        .relay_mode(relay_mode.clone());
+
+    let (progress_tx, progress_rx) = mpsc::channel(64);
+    let endpoint = builder.bind().await?;
+    let store = create_send_mem_store();
+
+    let blobs = BlobsProtocol::new(
+        &store,
+        Some(EventSender::new(
+            progress_tx,
+            EventMask {
+                connected: ConnectMode::Notify,
+                get: RequestMode::NotifyLog,
+                ..EventMask::DEFAULT
+            },
+        )),
+    );
+
+    let (temp_tag, size) = import_named_bytes_collection(items, blobs.store()).await?;
+
+    let outcome = run_share_session(
+        endpoint,
+        store,
+        blobs,
+        temp_tag,
+        size,
+        metadata,
+        ticket_type,
+        app_handle,
+        entry_type,
         relay_mode,
         None,
         progress_rx,

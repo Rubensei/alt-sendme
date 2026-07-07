@@ -10,6 +10,6 @@ pub use protocol::{
     AppHandle, EventEmitter, FileMetadata, FilePreviewItem, ReceiveOptions, RelayModeOption,
     SendOptions,
 };
-pub use receive::download_bytes;
-pub use send::start_share_bytes;
+pub use receive::download_files;
+pub use send::{start_share_bytes, start_share_items_bytes};
 pub use types::{WasmReceiveResult, WasmShareSession};
