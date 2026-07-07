@@ -69,7 +69,7 @@
 		"noFolderSelected": "未選擇資料夾",
 		"conflictsMore": "... 等 {{count}} 項",
 		"pasteTicket": "在此處貼上票券：",
-		"ticketPlaceholder": "sendme 接收票券...",
+		"ticketPlaceholder": "AltSendme 接收票券...",
 		"howToReceive": "如何接收檔案",
 		"instruction1": "傳送者必須在線上並正在分享檔案",
 		"instruction2": "從傳送者處取得票券",

@@ -69,7 +69,7 @@
 		"noFolderSelected": "لم يتم اختيار مجلد",
 		"conflictsMore": "... و {{count}} أخرى",
 		"pasteTicket": "الصق التذكرة هنا:",
-		"ticketPlaceholder": "sendme تذكرة الاستقبال...",
+		"ticketPlaceholder": "AltSendme تذكرة الاستقبال...",
 		"howToReceive": "كيفية استقبال الملفات",
 		"instruction1": "يجب أن يكون المرسل متصل بالإنترنت ويشارك ملفاً",
 		"instruction2": "احصل على تذكرة من المرسل",

@@ -75,7 +75,7 @@
 		"browserDownloadsHint": "This browser cannot pick a save folder. Files will download to your default downloads location.",
 		"conflictsMore": "... and {{count}} more",
 		"pasteTicket": "Paste the ticket here:",
-		"ticketPlaceholder": "sendme receive ticket...",
+		"ticketPlaceholder": "AltSendme receive ticket...",
 		"howToReceive": "How to receive files",
 		"instruction1": "Sender must be online and sharing a file",
 		"instruction2": "Get a ticket from the sender",

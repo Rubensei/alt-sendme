@@ -69,7 +69,7 @@
 		"noFolderSelected": "Nie wybrano folderu",
 		"conflictsMore": "... i jeszcze {{count}}",
 		"pasteTicket": "Wklej bilet tutaj:",
-		"ticketPlaceholder": "sendme bilet odbioru...",
+		"ticketPlaceholder": "AltSendme bilet odbioru...",
 		"howToReceive": "Jak odbierać pliki",
 		"instruction1": "Nadawca musi być online i udostępniać plik",
 		"instruction2": "Odbierz bilet od nadawcy",
