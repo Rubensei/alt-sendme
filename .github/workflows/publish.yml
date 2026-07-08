@@ -300,7 +300,7 @@ jobs:
           TAURI_LINUX_AYATANA_APPINDICATOR: ${{ contains(matrix.platform, 'ubuntu') && '1' || '' }}
         with:
           projectPath: ./src-tauri
-          tauriScript: 'pnpm tauri --'
+          tauriScript: 'pnpm run tauri'
           releaseId: ${{ needs.prepare-release.outputs.release_id }}
           tagName: ${{ github.ref_name }}
           args: ${{ matrix.args }}
@@ -470,6 +470,9 @@ jobs:
         with:
           toolchain: 1.91.0
           targets: wasm32-unknown-unknown
+
+      - name: Ensure wasm32 target
+        run: rustup target add wasm32-unknown-unknown
 
       - name: Install clang for WASM (ring)
         run: |
