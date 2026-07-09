@@ -2,8 +2,19 @@
 	"appTitle": "AltSendme",
 	"send": "Send",
 	"webPreview": {
-		"banner": "Preview mode — file transfers require the desktop app.",
+		"banner": "Preview mode - file transfers require the desktop app.",
 		"transferUnavailable": "File transfer is not available in the web preview. Download the desktop app to send and receive files."
+	},
+	"webPromo": {
+		"platforms": "AltSendme is available as desktop, Android, CLI, and web.",
+		"notice": "Web version doesn't support direct connections - traffic is relayed through encrypted public relays and speeds are throttled. Your files stay encrypted either way. Use the desktop/CLI app or custom relays for a better experience.",
+		"linksLabel": "Get the desktop app and project links",
+		"download": "See download options",
+		"website": "Website",
+		"compare": "Compare with other P2P tools",
+		"community": "Community",
+		"github": "GitHub",
+		"buyMeACoffee": "Buy me a coffee"
 	},
 	"receive": "Receive",
 	"ok": "OK",

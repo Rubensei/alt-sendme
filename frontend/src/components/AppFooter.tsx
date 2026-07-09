@@ -1,7 +1,12 @@
 import { buttonVariants } from './ui/button'
 import { CoffeeIcon, GithubIcon, GlobeIcon, SettingsIcon } from 'lucide-react'
 import { useTranslation } from '@/i18n'
-import { DONATE_LINK, VERSION_DISPLAY } from '@/lib/version'
+import {
+	DONATE_LINK,
+	GITHUB_REPO_LINK,
+	VERSION_DISPLAY,
+	WEBSITE_LINK,
+} from '@/lib/version'
 import { Separator } from './ui/separator'
 import { Link } from 'react-router-dom'
 import { handleExternalLinkClick } from '@/lib/openExternalUrl'
@@ -9,7 +14,7 @@ import { RelayStatusButton } from './RelayStatusButton'
 
 const CONTACTS = [
 	{
-		link: 'https://github.com/tonyantony300/alt-sendme',
+		link: GITHUB_REPO_LINK,
 		icon: <GithubIcon />,
 		'aria-label': 'Github source code',
 	},
@@ -19,7 +24,7 @@ const CONTACTS = [
 		'aria-label': 'Buy me a coffee',
 	},
 	{
-		link: 'https://www.altsendme.com/',
+		link: WEBSITE_LINK,
 		icon: <GlobeIcon />,
 		'aria-label': 'Alt SendMe website',
 	},

@@ -247,12 +247,37 @@
 	}
 
 	body.web-app-shell #root {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		width: 100%;
+		min-height: 100dvh;
+		padding: 1rem;
+		padding-left: clamp(1rem, 5vw, 3.5rem);
+		box-sizing: border-box;
+	}
+
+	body.web-app-shell .web-app-layout {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-end;
+		gap: clamp(0.75rem, 1.5vw, 1.25rem);
+		width: 100%;
+		max-width: min(
+			calc(var(--web-app-max-width) + 11rem),
+			calc(100vw - 2rem)
+		);
+	}
+
+	body.web-app-shell .web-app-frame {
 		position: relative;
 		transform: translateZ(0);
 		display: flex;
+		flex: 1 1 auto;
+		min-width: 0;
 		flex-direction: column;
-		width: min(var(--web-app-max-width), 100vw);
-		height: min(var(--web-app-max-height), 100dvh);
+		width: min(var(--web-app-max-width), calc(100vw - 13rem - 2rem));
+		height: min(var(--web-app-max-height), calc(100dvh - 2rem));
 		max-width: var(--web-app-max-width);
 		max-height: var(--web-app-max-height);
 		overflow: hidden;
@@ -263,7 +288,33 @@
 			0 0 0 1px color-mix(in srgb, var(--border) 50%, transparent);
 	}
 
-	body.web-app-shell #root main {
+	@media (max-width: 1023px) {
+		body.web-app-shell #root {
+			justify-content: center;
+			padding-left: 1rem;
+		}
+
+		body.web-app-shell .web-app-layout {
+			max-width: min(var(--web-app-max-width), 100%);
+		}
+
+		body.web-app-shell .web-app-frame {
+			flex: none;
+			width: min(var(--web-app-max-width), calc(100vw - 2rem));
+		}
+	}
+
+	body.web-app-shell .web-promo-panel {
+		display: none;
+	}
+
+	@media (min-width: 1024px) {
+		body.web-app-shell .web-promo-panel {
+			display: flex;
+		}
+	}
+
+	body.web-app-shell .web-app-frame main {
 		flex: 1;
 		min-height: 0;
 	}

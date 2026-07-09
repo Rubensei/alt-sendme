@@ -7,3 +7,8 @@ export const PRIVACY_LINK =
 export const LICENSE_LINK =
 	'https://github.com/tonyantony300/alt-sendme/blob/main/LICENSE'
 export const DONATE_LINK = 'https://buymeacoffee.com/tny_antny'
+export const GITHUB_REPO_LINK = 'https://github.com/tonyantony300/alt-sendme'
+export const DOWNLOAD_PAGE_LINK = 'https://www.altsendme.com/en/downloads'
+export const COMPARE_PAGE_LINK = 'https://www.altsendme.com/en/compare'
+export const WEBSITE_LINK = 'https://www.altsendme.com/'
+export const COMMUNITY_LINK = 'https://discord.gg/xwb7z22Eve'
