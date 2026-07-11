@@ -3,10 +3,14 @@ import { listen } from '@/lib/platform-api'
 import { IS_DESKTOP } from '@/lib/platform'
 import {
 	forgetPairedDevice,
+	getDeviceInfo,
 	joinPairing,
 	listPairedDevices,
+	renamePairedDevice,
+	setDeviceDisplayName,
 	startPairingHost,
 	stopPairingHost,
+	type DeviceInfo,
 	type PairedDevice,
 } from '@/lib/pairing-api'
 import { useNodeCapability } from './useNodeCapability'
@@ -15,6 +19,7 @@ const PAIRING_HOST_TTL_SECS = 60
 
 export function usePairing() {
 	const [devices, setDevices] = useState<PairedDevice[]>([])
+	const [thisDevice, setThisDevice] = useState<DeviceInfo | null>(null)
 	const [pairingTicket, setPairingTicket] = useState<string | null>(null)
 	const [hostExpiresIn, setHostExpiresIn] = useState<number | null>(null)
 	const [isJoining, setIsJoining] = useState(false)
@@ -33,9 +38,22 @@ export function usePairing() {
 		}
 	}, [isNodeReady])
 
+	const refreshThisDevice = useCallback(async () => {
+		if (!IS_DESKTOP || !isNodeReady) {
+			setThisDevice(null)
+			return
+		}
+		try {
+			setThisDevice(await getDeviceInfo())
+		} catch (error) {
+			console.error('Failed to load this device:', error)
+		}
+	}, [isNodeReady])
+
 	useEffect(() => {
 		void refreshDevices()
-	}, [refreshDevices])
+		void refreshThisDevice()
+	}, [refreshDevices, refreshThisDevice])
 
 	useEffect(() => {
 		if (!IS_DESKTOP) return
@@ -131,8 +149,27 @@ export function usePairing() {
 		[refreshDevices]
 	)
 
+	const renameThisDevice = useCallback(
+		async (displayName: string) => {
+			const updated = await setDeviceDisplayName(displayName)
+			if (updated) setThisDevice(updated)
+			return updated
+		},
+		[]
+	)
+
+	const renameDevice = useCallback(
+		async (endpointId: string, displayName: string) => {
+			const updated = await renamePairedDevice(endpointId, displayName)
+			await refreshDevices()
+			return updated
+		},
+		[refreshDevices]
+	)
+
 	return {
 		devices,
+		thisDevice,
 		pairingTicket,
 		hostExpiresIn,
 		isJoining,
@@ -140,9 +177,12 @@ export function usePairing() {
 		isNodeReady,
 		nodeStatus,
 		refreshDevices,
+		refreshThisDevice,
 		openHostPairing,
 		closeHostPairing,
 		join,
 		forget,
+		renameThisDevice,
+		renameDevice,
 	}
 }

@@ -121,8 +121,9 @@ impl ControlProtocol {
 
         let our_info = ControlMessage::PairingInfo {
             endpoint_id: self.ctx.identity.endpoint_id(),
-            display_name: self.ctx.identity.display_name().to_string(),
-            device_type: self.ctx.identity.meta.device_type.clone(),
+            display_name: self.ctx.identity.display_name(),
+            device_type: self.ctx.identity.device_type(),
+            os: self.ctx.identity.os(),
             signature: sign_challenge(&self.ctx.identity.secret_key, &keying),
         };
         write_message(&mut send, &our_info)
@@ -132,7 +133,8 @@ impl ControlProtocol {
             "control.session.sent_pairing_info",
             remote = %remote,
             local = %local,
-            display_name = %self.ctx.identity.display_name()
+            display_name = %self.ctx.identity.display_name(),
+            os = %self.ctx.identity.os()
         );
 
         let mut remote_info: Option<ControlMessage> = None;
@@ -183,6 +185,7 @@ impl ControlProtocol {
                     endpoint_id,
                     display_name,
                     device_type,
+                    os,
                     signature,
                 } => {
                     let Ok(peer_id) = EndpointId::from_str(&endpoint_id) else {
@@ -206,12 +209,14 @@ impl ControlProtocol {
                         remote = %remote,
                         peer_id = %endpoint_id,
                         display_name = %display_name,
-                        device_type = %device_type
+                        device_type = %device_type,
+                        os = %os
                     );
                     remote_info = Some(ControlMessage::PairingInfo {
                         endpoint_id,
                         display_name,
                         device_type,
+                        os,
                         signature,
                     });
                 }
@@ -311,6 +316,7 @@ impl ControlProtocol {
                     endpoint_id,
                     display_name,
                     device_type,
+                    os,
                     ..
                 }) = &remote_info
                 {
@@ -319,6 +325,7 @@ impl ControlProtocol {
                         endpoint_id: endpoint_id.clone(),
                         display_name: display_name.clone(),
                         device_type: device_type.clone(),
+                        os: os.clone(),
                         paired_at: now,
                         last_seen_at: now,
                     };
@@ -439,7 +446,8 @@ impl NodeService {
             "node.init.identity",
             local_endpoint = %identity.endpoint_id(),
             display_name = %identity.display_name(),
-            device_type = %identity.meta.device_type,
+            device_type = %identity.device_type(),
+            os = %identity.os(),
             allowlist_size = allowed.len(),
             stored_devices = paired_list.len()
         );
@@ -536,6 +544,30 @@ impl NodeService {
 
     pub fn device_info(&self) -> DeviceInfo {
         DeviceInfo::from(self.identity.as_ref())
+    }
+
+    pub fn set_device_display_name(&self, display_name: &str) -> anyhow::Result<DeviceInfo> {
+        let info = self.identity.set_display_name(display_name)?;
+        pairing_dev!(
+            "identity.rename",
+            endpoint_id = %info.endpoint_id,
+            display_name = %info.display_name
+        );
+        Ok(info)
+    }
+
+    pub fn rename_paired(
+        &self,
+        endpoint_id: &str,
+        display_name: &str,
+    ) -> anyhow::Result<PairedDevice> {
+        let device = self.paired_store.rename(endpoint_id, display_name)?;
+        pairing_dev!(
+            "store.rename",
+            endpoint_id = %device.endpoint_id,
+            display_name = %device.display_name
+        );
+        Ok(device)
     }
 
     pub fn list_paired(&self) -> anyhow::Result<Vec<PairedDevice>> {
@@ -683,8 +715,9 @@ impl NodeService {
 
         let info = ControlMessage::PairingInfo {
             endpoint_id: self.identity.endpoint_id(),
-            display_name: self.identity.display_name().to_string(),
-            device_type: self.identity.meta.device_type.clone(),
+            display_name: self.identity.display_name(),
+            device_type: self.identity.device_type(),
+            os: self.identity.os(),
             signature: sign_challenge(&self.identity.secret_key, &keying),
         };
         write_message(&mut send, &info).await?;
@@ -711,6 +744,7 @@ impl NodeService {
                 endpoint_id,
                 display_name,
                 device_type,
+                os,
                 signature,
             }) => {
                 let peer_id = EndpointId::from_str(&endpoint_id)?;
@@ -720,6 +754,7 @@ impl NodeService {
                         endpoint_id: endpoint_id.clone(),
                         display_name: display_name.clone(),
                         device_type,
+                        os,
                         paired_at: now,
                         last_seen_at: now,
                     })?;
@@ -847,7 +882,7 @@ impl NodeService {
             blob_ticket: blob_ticket.to_string(),
             file_count,
             total_size,
-            sender_name: self.identity.display_name().to_string(),
+            sender_name: self.identity.display_name(),
         };
         write_message(&mut send, &invite)
             .await

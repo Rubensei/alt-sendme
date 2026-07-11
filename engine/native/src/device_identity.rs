@@ -1,28 +1,59 @@
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
 use anyhow::Context;
 use data_encoding::HEXLOWER;
 use iroh::SecretKey;
 use protocol::{
-    default_device_type, default_display_name, DeviceMetaFile, PairedDevice, PairedDeviceList,
+    default_device_type, default_display_name, detect_os, normalize_display_name, DeviceMetaFile,
+    PairedDevice, PairedDeviceList,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::secret_store;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DeviceIdentity {
     pub secret_key: SecretKey,
-    pub meta: DeviceMetaFile,
+    meta: RwLock<DeviceMetaFile>,
+    meta_path: PathBuf,
 }
 
 impl DeviceIdentity {
     pub fn endpoint_id(&self) -> String {
-        self.meta.endpoint_id.clone()
+        self.meta.read().expect("device meta lock").endpoint_id.clone()
     }
 
-    pub fn display_name(&self) -> &str {
-        &self.meta.display_name
+    pub fn display_name(&self) -> String {
+        self.meta
+            .read()
+            .expect("device meta lock")
+            .display_name
+            .clone()
+    }
+
+    pub fn device_type(&self) -> String {
+        self.meta
+            .read()
+            .expect("device meta lock")
+            .device_type
+            .clone()
+    }
+
+    pub fn os(&self) -> String {
+        self.meta.read().expect("device meta lock").os.clone()
+    }
+
+    pub fn set_display_name(&self, name: &str) -> anyhow::Result<DeviceInfo> {
+        let normalized = normalize_display_name(name).map_err(anyhow::Error::msg)?;
+        {
+            let mut meta = self.meta.write().expect("device meta lock");
+            meta.display_name = normalized;
+            meta.name_is_custom = true;
+            meta.migrate();
+            Self::write_meta(&self.meta_path, &meta)?;
+        }
+        Ok(DeviceInfo::from(self))
     }
 }
 
@@ -56,6 +87,8 @@ impl PairedDeviceStore {
             step = "store.remember.start",
             endpoint_id = %device.endpoint_id,
             display_name = %device.display_name,
+            device_type = %device.device_type,
+            os = %device.os,
             "pairing-dev"
         );
         let mut file = self.read_file()?;
@@ -67,6 +100,7 @@ impl PairedDeviceStore {
         {
             existing.display_name = device.display_name;
             existing.device_type = device.device_type;
+            existing.os = device.os;
             existing.last_seen_at = device.last_seen_at;
             let saved = existing.clone();
             self.write_file(&file)?;
@@ -88,6 +122,21 @@ impl PairedDeviceStore {
             "pairing-dev"
         );
         Ok(device)
+    }
+
+    pub fn rename(&self, endpoint_id: &str, display_name: &str) -> anyhow::Result<PairedDevice> {
+        let normalized = normalize_display_name(display_name).map_err(anyhow::Error::msg)?;
+        let mut file = self.read_file()?;
+        let id = endpoint_id.to_lowercase();
+        let existing = file
+            .devices
+            .iter_mut()
+            .find(|d| d.endpoint_id.to_lowercase() == id)
+            .context("paired device not found")?;
+        existing.display_name = normalized;
+        let saved = existing.clone();
+        self.write_file(&file)?;
+        Ok(saved)
     }
 
     pub fn forget(&self, endpoint_id: &str) -> anyhow::Result<()> {
@@ -146,6 +195,18 @@ impl PairedDeviceStore {
     }
 }
 
+impl DeviceIdentity {
+    fn write_meta(path: &Path, meta: &DeviceMetaFile) -> anyhow::Result<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(&tmp, serde_json::to_string_pretty(meta)?)?;
+        std::fs::rename(&tmp, path)?;
+        Ok(())
+    }
+}
+
 pub fn load_or_create_identity(data_dir: &Path) -> anyhow::Result<DeviceIdentity> {
     std::fs::create_dir_all(data_dir)?;
     let meta_path = data_dir.join("device.json");
@@ -153,10 +214,10 @@ pub fn load_or_create_identity(data_dir: &Path) -> anyhow::Result<DeviceIdentity
     let secret = load_secret_key()?;
     let endpoint_id = HEXLOWER.encode(secret.public().as_bytes());
 
-    let meta = if meta_path.exists() {
+    let mut meta = if meta_path.exists() {
         let raw = std::fs::read_to_string(&meta_path)?;
-        let mut meta: DeviceMetaFile = serde_json::from_str(&raw)
-            .context("invalid device.json")?;
+        let mut meta: DeviceMetaFile =
+            serde_json::from_str(&raw).context("invalid device.json")?;
         if meta.endpoint_id.to_lowercase() != endpoint_id {
             tracing::warn!("device.json endpoint_id mismatch; updating to keychain identity");
             tracing::info!(
@@ -168,18 +229,35 @@ pub fn load_or_create_identity(data_dir: &Path) -> anyhow::Result<DeviceIdentity
             );
             meta.endpoint_id = endpoint_id;
         }
+        meta.migrate();
+        // Refresh auto-detected hostname only when the user has not renamed.
+        if !meta.name_is_custom {
+            let detected = default_display_name();
+            if meta.display_name.trim().is_empty()
+                || meta.display_name.eq_ignore_ascii_case("altsendme")
+            {
+                meta.display_name = detected;
+            }
+        }
+        if meta.os.trim().is_empty() {
+            meta.os = detect_os();
+        }
+        if meta.device_type.trim().is_empty() {
+            meta.device_type = default_device_type();
+        }
         meta
     } else {
-        DeviceMetaFile::new(
-            endpoint_id,
-            default_display_name(),
-            default_device_type(),
-        )
+        DeviceMetaFile::new(endpoint_id, default_display_name(), default_device_type())
     };
 
-    std::fs::write(&meta_path, serde_json::to_string_pretty(&meta)?)?;
+    meta.migrate();
+    DeviceIdentity::write_meta(&meta_path, &meta)?;
 
-    Ok(DeviceIdentity { secret_key: secret, meta })
+    Ok(DeviceIdentity {
+        secret_key: secret,
+        meta: RwLock::new(meta),
+        meta_path,
+    })
 }
 
 fn load_secret_key() -> anyhow::Result<SecretKey> {
@@ -211,14 +289,16 @@ pub struct DeviceInfo {
     pub endpoint_id: String,
     pub display_name: String,
     pub device_type: String,
+    pub os: String,
 }
 
 impl From<&DeviceIdentity> for DeviceInfo {
     fn from(id: &DeviceIdentity) -> Self {
         Self {
             endpoint_id: id.endpoint_id(),
-            display_name: id.meta.display_name.clone(),
-            device_type: id.meta.device_type.clone(),
+            display_name: id.display_name(),
+            device_type: id.device_type(),
+            os: id.os(),
         }
     }
 }

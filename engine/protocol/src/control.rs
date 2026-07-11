@@ -11,6 +11,10 @@ pub enum ControlMessage {
         endpoint_id: String,
         display_name: String,
         device_type: String,
+        /// OS family exchanged at pair time (`macos`, `linux`, …). Optional for
+        /// backward compatibility with older peers.
+        #[serde(default)]
+        os: String,
         signature: String,
     },
     RememberVote {

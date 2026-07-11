@@ -100,6 +100,8 @@ pub fn run() {
             #[cfg(desktop)]
             get_device_info,
             #[cfg(desktop)]
+            set_device_display_name,
+            #[cfg(desktop)]
             start_pairing_host,
             #[cfg(desktop)]
             stop_pairing_host,
@@ -109,6 +111,8 @@ pub fn run() {
             list_paired_devices,
             #[cfg(desktop)]
             forget_paired_device,
+            #[cfg(desktop)]
+            rename_paired_device,
             #[cfg(desktop)]
             invite_paired_device,
         ])

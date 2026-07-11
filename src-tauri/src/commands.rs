@@ -761,9 +761,61 @@ pub async fn get_device_info(state: State<'_, AppStateMutex>) -> Result<DeviceIn
     pairing_dev!(
         "cmd.get_device_info",
         endpoint_id = %info.endpoint_id,
+        display_name = %info.display_name,
+        device_type = %info.device_type,
+        os = %info.os
+    );
+    Ok(info)
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn set_device_display_name(
+    display_name: String,
+    state: State<'_, AppStateMutex>,
+) -> Result<DeviceInfo, String> {
+    pairing_dev!("cmd.set_device_display_name", display_name = %display_name);
+    let guard = state.lock().await;
+    let node = require_node(&guard)?;
+    let info = node
+        .set_device_display_name(&display_name)
+        .map_err(|e| {
+            pairing_dev_warn!("cmd.set_device_display_name.failed", error = %e);
+            e.to_string()
+        })?;
+    pairing_dev!(
+        "cmd.set_device_display_name.done",
         display_name = %info.display_name
     );
     Ok(info)
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn rename_paired_device(
+    endpoint_id: String,
+    display_name: String,
+    state: State<'_, AppStateMutex>,
+) -> Result<PairedDevice, String> {
+    pairing_dev!(
+        "cmd.rename_paired_device",
+        endpoint_id = %endpoint_id,
+        display_name = %display_name
+    );
+    let guard = state.lock().await;
+    let node = require_node(&guard)?;
+    let device = node
+        .rename_paired(&endpoint_id, &display_name)
+        .map_err(|e| {
+            pairing_dev_warn!("cmd.rename_paired_device.failed", error = %e);
+            e.to_string()
+        })?;
+    pairing_dev!(
+        "cmd.rename_paired_device.done",
+        endpoint_id = %device.endpoint_id,
+        display_name = %device.display_name
+    );
+    Ok(device)
 }
 
 #[cfg(desktop)]

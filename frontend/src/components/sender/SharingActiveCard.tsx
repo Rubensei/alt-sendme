@@ -13,6 +13,8 @@ import { Switch } from '../ui/switch'
 import { toastManager } from '../ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { useAppSettingStore } from '../../store/app-setting'
+import { deviceSubtitle } from '@/lib/pairing-api'
+import { deviceTypeIcon } from '@/lib/device-icon'
 
 export function SharingActiveCard({
 	selectedPaths,
@@ -148,22 +150,35 @@ export function SharingActiveCard({
 						{t('common:sender.pairedDevices.yourDevicesTitle')}
 					</p>
 					<ul className="space-y-2">
-						{pairedDevices.map((device) => (
-							<li
-								key={device.endpoint_id}
-								className="flex items-center justify-between gap-2 text-sm"
-							>
-								<span className="truncate">{device.display_name}</span>
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									onClick={() => onInvitePairedDevice(device.endpoint_id)}
+						{pairedDevices.map((device) => {
+							const Icon = deviceTypeIcon(device.device_type)
+							return (
+								<li
+									key={device.endpoint_id}
+									className="flex items-center justify-between gap-2 text-sm"
 								>
-									{t('common:sender.pairedDevices.send')}
-								</Button>
-							</li>
-						))}
+									<div className="flex min-w-0 items-center gap-2">
+										<Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+										<div className="min-w-0">
+											<span className="block truncate">
+												{device.display_name}
+											</span>
+											<span className="block truncate text-xs text-muted-foreground">
+												{deviceSubtitle(device)}
+											</span>
+										</div>
+									</div>
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										onClick={() => onInvitePairedDevice(device.endpoint_id)}
+									>
+										{t('common:sender.pairedDevices.send')}
+									</Button>
+								</li>
+							)
+						})}
 					</ul>
 				</div>
 			)}

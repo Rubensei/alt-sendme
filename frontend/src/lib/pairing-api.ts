@@ -6,12 +6,14 @@ export interface DeviceInfo {
 	endpoint_id: string
 	display_name: string
 	device_type: string
+	os: string
 }
 
 export interface PairedDevice {
 	endpoint_id: string
 	display_name: string
 	device_type: string
+	os: string
 	paired_at: number
 	last_seen_at: number
 }
@@ -58,6 +60,15 @@ export async function getDeviceInfo(): Promise<DeviceInfo | null> {
 	return invoke<DeviceInfo>('get_device_info')
 }
 
+export async function setDeviceDisplayName(
+	displayName: string
+): Promise<DeviceInfo | null> {
+	if (!desktopOnly()) return null
+	return invoke<DeviceInfo>('set_device_display_name', {
+		displayName,
+	})
+}
+
 export async function startPairingHost(): Promise<string> {
 	if (!desktopOnly()) {
 		throw new Error('Device pairing is only available on desktop')
@@ -87,6 +98,17 @@ export async function forgetPairedDevice(endpointId: string): Promise<void> {
 	await invoke('forget_paired_device', { endpointId })
 }
 
+export async function renamePairedDevice(
+	endpointId: string,
+	displayName: string
+): Promise<PairedDevice | null> {
+	if (!desktopOnly()) return null
+	return invoke<PairedDevice>('rename_paired_device', {
+		endpointId,
+		displayName,
+	})
+}
+
 export async function invitePairedDevice(
 	endpointId: string,
 	blobTicket: string,
@@ -108,4 +130,46 @@ export async function invitePairedDevice(
 	})
 	console.log('[paired-invite] sender: invite_paired_device returned', result)
 	return result.delivered
+}
+
+export function formatOsLabel(os: string | undefined | null): string {
+	switch ((os ?? '').toLowerCase()) {
+		case 'macos':
+			return 'macOS'
+		case 'windows':
+			return 'Windows'
+		case 'linux':
+			return 'Linux'
+		case 'ios':
+			return 'iOS'
+		case 'android':
+			return 'Android'
+		default:
+			return os?.trim() || ''
+	}
+}
+
+export function formatDeviceTypeLabel(
+	deviceType: string | undefined | null
+): string {
+	switch ((deviceType ?? '').toLowerCase()) {
+		case 'laptop':
+			return 'Laptop'
+		case 'desktop':
+			return 'Desktop'
+		case 'phone':
+			return 'Phone'
+		case 'tablet':
+			return 'Tablet'
+		default:
+			return deviceType?.trim() || 'Device'
+	}
+}
+
+export function deviceSubtitle(
+	device: Pick<PairedDevice, 'device_type' | 'os'> | Pick<DeviceInfo, 'device_type' | 'os'>
+): string {
+	const typeLabel = formatDeviceTypeLabel(device.device_type)
+	const osLabel = formatOsLabel(device.os)
+	return osLabel ? `${typeLabel} · ${osLabel}` : typeLabel
 }
