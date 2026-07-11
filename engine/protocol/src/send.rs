@@ -19,8 +19,8 @@ use tokio::sync::mpsc;
 pub const METADATA_ALPN: &[u8] = b"sendme/metadata/1";
 
 #[derive(Debug, Clone)]
-struct MetadataProtocol {
-    metadata: Option<FileMetadata>,
+pub struct MetadataProtocol {
+    pub metadata: Option<FileMetadata>,
 }
 
 impl ProtocolHandler for MetadataProtocol {
@@ -163,7 +163,7 @@ pub struct ShareSessionOutcome<S> {
     pub hash: String,
     pub size: u64,
     pub entry_type: String,
-    pub router: iroh::protocol::Router,
+    pub router: Option<iroh::protocol::Router>,
     pub temp_tag: TempTag,
     pub store: S,
     pub progress_handle: AbortOnDropHandle<anyhow::Result<()>>,
@@ -219,9 +219,53 @@ where
         hash: hash.to_hex().to_string(),
         size,
         entry_type,
-        router,
+        router: Some(router),
         temp_tag,
         store,
+        progress_handle: AbortOnDropHandle::new(progress_handle),
+        cleanup_dir,
+    })
+}
+
+/// Build a share ticket on an already-online endpoint (node-owned router handles ALPNs).
+pub async fn run_share_on_endpoint(
+    endpoint: &Endpoint,
+    temp_tag: TempTag,
+    size: u64,
+    ticket_type: AddrInfoOptions,
+    app_handle: &AppHandle,
+    entry_type: String,
+    relay_mode: RelayMode,
+    cleanup_dir: Option<PathBuf>,
+    progress_rx: mpsc::Receiver<ProviderMessage>,
+) -> anyhow::Result<ShareSessionOutcome<()>> {
+    let progress_handle = n0_future::task::spawn(show_provide_progress_with_logging(
+        progress_rx,
+        app_handle.clone(),
+        size,
+        entry_type.clone(),
+    ));
+
+    timeout(Duration::from_secs(30), async move {
+        if !matches!(relay_mode, RelayMode::Disabled) {
+            let _ = endpoint.online().await;
+        }
+    })
+    .await?;
+
+    let hash = temp_tag.hash();
+    let mut addr = endpoint.addr();
+    apply_options(&mut addr, ticket_type);
+    let ticket = BlobTicket::new(addr, hash, BlobFormat::HashSeq);
+
+    Ok(ShareSessionOutcome {
+        ticket: ticket.to_string(),
+        hash: hash.to_hex().to_string(),
+        size,
+        entry_type,
+        router: None,
+        temp_tag,
+        store: (),
         progress_handle: AbortOnDropHandle::new(progress_handle),
         cleanup_dir,
     })
@@ -287,7 +331,18 @@ async fn show_provide_progress_with_logging(
                 };
 
                 match item {
-                    iroh_blobs::provider::events::ProviderMessage::ClientConnectedNotify(_msg) => {
+                    iroh_blobs::provider::events::ProviderMessage::ClientConnectedNotify(msg) => {
+                        if let Some(endpoint_id) = msg.endpoint_id {
+                            let payload = serde_json::json!({
+                                "endpoint_id": endpoint_id.to_string(),
+                            });
+                            if let Some(handle) = &app_handle {
+                                let _ = handle.emit_event_with_payload(
+                                    "share-peer-connected",
+                                    &payload.to_string(),
+                                );
+                            }
+                        }
                     }
                     iroh_blobs::provider::events::ProviderMessage::ConnectionClosed(_msg) => {
                     }

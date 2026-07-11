@@ -1,5 +1,6 @@
 import type { AlertDialogState } from './ui'
 import type { TransferProgress } from './transfer'
+import type { PairedDevice } from '@/lib/pairing-api'
 
 export interface SharingState {
 	isSharing: boolean
@@ -37,6 +38,9 @@ export interface SharingControlsProps {
 	transferProgress: TransferProgress | null
 	isBroadcastMode: boolean
 	activeConnectionCount?: number
+	pairedDevices?: PairedDevice[]
+	isNodeReady?: boolean
+	onInvitePairedDevice?: (endpointId: string) => Promise<void>
 	onStartSharing: () => Promise<void>
 	onStopSharing: () => Promise<void>
 	onCopyTicket: () => Promise<void>

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { invoke, listen, type UnlistenFn } from '@/lib/platform-api'
 import {
 	getWebPreviewErrorMessage,
@@ -10,6 +10,13 @@ import type { TransferMetadata, TransferProgress } from '../types/transfer'
 import { SpeedAverager, calculateETA } from '../utils/etaUtils'
 import { getRelayConfigArg } from '../lib/relay'
 import { useSenderStore } from '../store/sender-store'
+import { IS_DESKTOP } from '@/lib/platform'
+import {
+	invitePairedDevice,
+	listPairedDevices,
+	type PairedDevice,
+} from '@/lib/pairing-api'
+import { useNodeCapability } from '@/hooks/useNodeCapability'
 
 export interface UseSenderReturn {
 	// View state (replaces isSharing, isTransporting, isCompleted)
@@ -31,6 +38,9 @@ export interface UseSenderReturn {
 	transferProgress: TransferProgress | null
 	isBroadcastMode: boolean
 	activeConnectionCount: number
+	pairedDevices: PairedDevice[]
+	isNodeReady: boolean
+	onInvitePairedDevice: (endpointId: string) => Promise<void>
 
 	handleFileSelect: (
 		path: string,
@@ -85,6 +95,25 @@ export function useSender(): UseSenderReturn {
 		setActiveConnectionCount,
 	} = useSenderStore()
 
+	const [pairedDevices, setPairedDevices] = useState<PairedDevice[]>([])
+	const { isNodeReady } = useNodeCapability()
+
+	const refreshPairedDevices = useCallback(async () => {
+		if (!IS_DESKTOP) {
+			setPairedDevices([])
+			return
+		}
+		try {
+			setPairedDevices(await listPairedDevices())
+		} catch (error) {
+			console.error('Failed to load paired devices:', error)
+		}
+	}, [])
+
+	useEffect(() => {
+		void refreshPairedDevices()
+	}, [refreshPairedDevices])
+
 	// Refs for event listeners
 	const latestProgressRef = useRef<TransferProgress | null>(null)
 	const transferStartTimeRef = useRef<number | null>(null)
@@ -116,6 +145,7 @@ export function useSender(): UseSenderReturn {
 		let unlistenComplete: UnlistenFn | undefined
 		let unlistenFailed: UnlistenFn | undefined
 		let unlistenActiveCount: UnlistenFn | undefined
+		let unlistenDevicePaired: UnlistenFn | undefined
 
 		const safeUnlisten = (unlisten?: UnlistenFn) => {
 			if (unlisten) {
@@ -145,6 +175,15 @@ export function useSender(): UseSenderReturn {
 				nextUnlistenActiveCount()
 			} else {
 				unlistenActiveCount = nextUnlistenActiveCount
+			}
+
+			const nextUnlistenDevicePaired = await listen('device-paired', () => {
+				void refreshPairedDevices()
+			})
+			if (disposed) {
+				nextUnlistenDevicePaired()
+			} else {
+				unlistenDevicePaired = nextUnlistenDevicePaired
 			}
 
 			const nextUnlistenStart = await listen('transfer-started', () => {
@@ -531,6 +570,7 @@ export function useSender(): UseSenderReturn {
 			safeUnlisten(unlistenComplete)
 			safeUnlisten(unlistenFailed)
 			safeUnlisten(unlistenActiveCount)
+			safeUnlisten(unlistenDevicePaired)
 			unlistenStart = undefined
 			unlistenProgress = undefined
 			unlistenComplete = undefined
@@ -543,6 +583,7 @@ export function useSender(): UseSenderReturn {
 		setTransferProgress,
 		resetForBroadcast,
 		setActiveConnectionCount,
+		refreshPairedDevices,
 	])
 
 	const handleFilesSelect = async (
@@ -792,6 +833,44 @@ export function useSender(): UseSenderReturn {
 		await stopSharing()
 	}
 
+	const onInvitePairedDevice = async (endpointId: string) => {
+		if (!ticket) return
+		if (!isNodeReady) {
+			showAlert(
+				t('common:settings.devices.nodeUnavailableTitle'),
+				t('common:settings.devices.nodeUnavailableHint'),
+				'error'
+			)
+			return
+		}
+		const fileCount = transferMetadata?.itemCount ?? 1
+		const totalSize = transferMetadata?.fileSize ?? 0
+		try {
+			const delivered = await invitePairedDevice(
+				endpointId,
+				ticket,
+				fileCount,
+				totalSize
+			)
+			if (delivered) {
+				showAlert(t('common:sender.pairedDevices.inviteSent'), '', 'info')
+			} else {
+				showAlert(
+					t('common:sender.pairedDevices.inviteFailed'),
+					t('common:sender.pairedDevices.deviceUnreachable'),
+					'error'
+				)
+			}
+		} catch (error) {
+			console.error('Failed to invite paired device:', error)
+			showAlert(
+				t('common:sender.pairedDevices.inviteFailed'),
+				String(error),
+				'error'
+			)
+		}
+	}
+
 	const copyTicket = async () => {
 		if (ticket) {
 			try {
@@ -830,6 +909,9 @@ export function useSender(): UseSenderReturn {
 		transferProgress,
 		isBroadcastMode,
 		activeConnectionCount,
+		pairedDevices,
+		isNodeReady,
+		onInvitePairedDevice,
 
 		handleFileSelect,
 		handleFilesSelect,

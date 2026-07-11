@@ -24,3 +24,5 @@ export const IS_ANDROID = IS_TAURI && platform.includes('android')
 export const IS_MACOS = IS_TAURI && platform.includes('darwin')
 export const IS_WINDOWS = IS_TAURI && platform.includes('windows')
 export const IS_LINUX = IS_TAURI && platform.includes('linux')
+export const IS_DESKTOP =
+	IS_TAURI && !IS_ANDROID && (IS_MACOS || IS_WINDOWS || IS_LINUX)

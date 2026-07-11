@@ -24,6 +24,9 @@ export function SharingActiveCard({
 	isCompleted,
 	isBroadcastMode,
 	activeConnectionCount = 0,
+	pairedDevices = [],
+	isNodeReady = false,
+	onInvitePairedDevice,
 	onCopyTicket,
 	onStopSharing,
 	onSetBroadcast: _onSetBroadcast,
@@ -33,7 +36,6 @@ export function SharingActiveCard({
 		if (_onSetBroadcast) {
 			const isTurningOn = !isBroadcastMode
 			_onSetBroadcast(isTurningOn)
-			// Only show toast notification when turning broadcast mode ON, not for private sharing
 			if (isTurningOn) {
 				const toastId = crypto.randomUUID()
 				toastManager.add({
@@ -49,7 +51,6 @@ export function SharingActiveCard({
 						},
 					},
 				})
-				// Auto-close "You are broadcasting" notification after 1 seconds
 				setTimeout(() => {
 					toastManager.close(toastId)
 				}, 5000)
@@ -76,7 +77,6 @@ export function SharingActiveCard({
 			}
 		: null
 
-	// Default progress object when transferProgress is not yet available
 	const defaultProgress = {
 		bytesTransferred: 0,
 		totalBytes: 0,
@@ -84,10 +84,16 @@ export function SharingActiveCard({
 		percentage: 0,
 	}
 
-	// Determine which progress object to use
 	const progressToDisplay = isTransporting
 		? clampedProgress || defaultProgress
 		: null
+
+	const showPairedSend =
+		!isTransporting &&
+		ticket &&
+		isNodeReady &&
+		pairedDevices.length > 0 &&
+		onInvitePairedDevice
 
 	return (
 		<div className="space-y-4">
@@ -134,6 +140,32 @@ export function SharingActiveCard({
 					isBroadcastMode={isBroadcastMode}
 					onSetBroadcast={onSetBroadcast}
 				/>
+			)}
+
+			{showPairedSend && (
+				<div className="space-y-2">
+					<p className="text-sm font-medium">
+						{t('common:sender.pairedDevices.yourDevicesTitle')}
+					</p>
+					<ul className="space-y-2">
+						{pairedDevices.map((device) => (
+							<li
+								key={device.endpoint_id}
+								className="flex items-center justify-between gap-2 text-sm"
+							>
+								<span className="truncate">{device.display_name}</span>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									onClick={() => onInvitePairedDevice(device.endpoint_id)}
+								>
+									{t('common:sender.pairedDevices.send')}
+								</Button>
+							</li>
+						))}
+					</ul>
+				</div>
 			)}
 
 			{isTransporting && progressToDisplay && (

@@ -1,28 +1,42 @@
-use engine::SendResult;
+use engine::{NodeService, SendResult};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Application state for managing sharing sessions
-#[derive(Default)]
 pub struct AppState {
+    pub node: Option<Arc<NodeService>>,
+    /// Set when desktop node initialization fails (pairing unavailable; send/receive still work).
+    pub node_init_error: Option<String>,
     pub current_share: Option<ShareHandle>,
-    pub is_share_starting: bool, // True while start_sharing is preparing metadata/session
-    pub is_transporting: bool,   // True when actual data transfer is happening
-    pub launch_intent: Option<String>, // Path to file/folder passed via CLI (e.g. context menu)
-    /// Sender half of the cancel channel for the active receive. Dropping or sending cancels it.
+    pub is_share_starting: bool,
+    pub is_transporting: bool,
+    pub launch_intent: Option<String>,
     pub current_receive_cancel: Option<tokio::sync::oneshot::Sender<()>>,
-    /// Hash hex of the most recently cancelled (partial) receive store still on disk.
-    /// Cleared when the partial store is deleted or consumed by a resume.
     pub last_cancelled_recv_hash: Option<String>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            node: None,
+            node_init_error: None,
+            current_share: None,
+            is_share_starting: false,
+            is_transporting: false,
+            launch_intent: None,
+            current_receive_cancel: None,
+            last_cancelled_recv_hash: None,
+        }
+    }
 }
 
 /// Handle for an active sharing session
 /// CRITICAL: This struct holds the router and temp_tag which keeps the server alive
 pub struct ShareHandle {
     pub ticket: String,
-    pub _path: PathBuf,          // Keep path for potential future use
-    pub send_result: SendResult, // This keeps router and temp_tag alive!
+    pub _path: PathBuf,
+    pub send_result: SendResult,
 }
 
 impl ShareHandle {
@@ -35,12 +49,14 @@ impl ShareHandle {
     }
 
     /// Stop the sharing session and free its resources.
-    /// The blobs temp dir gets removed when SendResult drops (its AutoCleanupDir field).
     pub async fn stop(&mut self) -> Result<(), String> {
         use std::time::Duration;
 
-        // Gracefully shutdown the router with timeout (same as CLI implementation)
-        match tokio::time::timeout(Duration::from_secs(2), self.send_result.router.shutdown()).await
+        match tokio::time::timeout(
+            Duration::from_secs(2),
+            self.send_result.router.shutdown(),
+        )
+        .await
         {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
@@ -51,17 +67,11 @@ impl ShareHandle {
             }
         }
 
-        // Explicitly close the endpoint to avoid "Endpoint dropped without calling close" error
-        // This ensures graceful cleanup of the iroh endpoint resources
         let endpoint = self.send_result.router.endpoint();
         endpoint.close().await;
-
-        // temp_tag, _store, _progress_handle and the blobs dir all get cleaned
-        // up once SendResult drops.
 
         Ok(())
     }
 }
 
-/// Thread-safe wrapper for AppState
 pub type AppStateMutex = Arc<Mutex<AppState>>;

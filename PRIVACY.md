@@ -23,8 +23,8 @@ AltSendme uses peer-to-peer (P2P) networking technology powered by [Iroh](https:
 
 AltSendme stores the following data locally on your device:
 
-- **Secret Keys**: Cryptographic keys used for node identification (stored in your system's standard storage location)
-- **Temporary Files**: During active transfers, temporary files are stored in your system's temp directory
+- **Secret Keys**: On desktop, your device's Iroh secret key is stored in the OS credential store (macOS Keychain, Windows Credential Manager, Linux Secret Service) under the `alt-sendme` service name. Public device metadata (display name, endpoint ID) is stored in the app data directory. During active transfers, temporary files are stored in your system's temp directory.
+- **Paired devices**: When you pair devices, AltSendme stores the remote device's endpoint ID and display name locally. Paired invites deliver the same one-time blob ticket as manual sharing; tickets are not reused across shares.
 - **Downloaded Files**: Files you receive are saved to a location you choose
 
 This data never leaves your device unless you explicitly share it (e.g., by sharing a transfer ticket).

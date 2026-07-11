@@ -43,7 +43,8 @@ Why rely on WeTransfer, Dropbox, or Google Drive when you can reliably and easil
 - **End-to-end encryption, always on** - Every transfer uses QUIC with TLS 1.3; relays only see encrypted traffic even if they are involved.
 - **Cryptographic authentication** - Every ticket verifies you're connected to the intended sender before any files transfer.
 - **Resumable & broadcastable** - Interrupted transfers resume automatically; share the same file with any number of peers at once.
-- **Preview before you commit** - See what you're receiving before you download it.
+- **Preview before you download** - See what you're receiving before you download it.
+- **Paired devices (desktop)** - Pair computers once in **Settings → Devices**, then send files without copying tickets each time. 
 - **Featherlight** - Tiny installs, minimal web footprint.
 - **Free & open source** - No upload costs, no size limits, community-driven.
 
@@ -137,8 +138,16 @@ We're looking for Partners to join our mission! Partner with us and support whil
 ## How it works 
 
 1. Drop your file or folder - AltSendme creates a one-time share code (called a "ticket").
-2.  Share the ticket via chat, email, or text.
-3. Your friend pastes the ticket in their app, and the transfer begins.
+2. Share the ticket via chat, email, or text — **or** send directly to a paired device (desktop).
+3. Your friend pastes the ticket in their app (or accepts a paired-device invite), and the transfer begins.
+
+### Paired devices (desktop)
+
+On macOS, Windows, and Linux you can pair devices in **Settings → Devices** using a pairing code. After pairing:
+
+- Senders can tap **Send** next to a paired device while sharing — no manual ticket copy.
+- Receivers get an in-app prompt when a paired sender invites them (app must be open).
+- Manual tickets and the [sendme CLI](https://www.iroh.computer/sendme) still work exactly as before.
 
 
 ## Comparison

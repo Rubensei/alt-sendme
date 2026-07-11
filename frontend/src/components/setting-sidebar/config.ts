@@ -9,6 +9,12 @@ export const settingSidebarConfig: Record<string, INavItem[]> = {
 			translationNs: 'settings.navItems.general',
 		},
 		{
+			label: 'Devices',
+			icon: 'Devices',
+			to: 'devices',
+			translationNs: 'settings.navItems.devices',
+		},
+		{
 			label: 'Relay',
 			icon: 'Network',
 			to: 'network',

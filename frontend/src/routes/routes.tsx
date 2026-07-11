@@ -5,6 +5,7 @@ import { IndexPage } from '.'
 import { RootLayout } from '@/components/layouts/RootLayout'
 import { NotFoundPage } from './notfound'
 import { SettingGeneralPage } from './settings.general'
+import { SettingDevicesPage } from './settings.devices'
 import { SettingNetworkPage } from './settings.network'
 import { SettingLayout } from '../components/layouts/SettingLayout'
 
@@ -42,6 +43,10 @@ export const routers = createBrowserRouter(
 						{
 							path: 'network',
 							Component: SettingNetworkPage,
+						},
+						{
+							path: 'devices',
+							Component: SettingDevicesPage,
 						},
 					],
 				},

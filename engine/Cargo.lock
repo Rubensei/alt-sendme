@@ -991,6 +991,7 @@ dependencies = [
  "data-encoding",
  "duct",
  "indicatif",
+ "iroh",
  "iroh-blobs",
  "irpc",
  "libc",
@@ -2219,6 +2220,16 @@ dependencies = [
  "futures-util",
  "once_cell",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "keyring"
+version = "3.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
+dependencies = [
+ "log",
+ "zeroize",
 ]
 
 [[package]]
@@ -3645,6 +3656,7 @@ dependencies = [
  "dirs",
  "iroh",
  "iroh-blobs",
+ "keyring",
  "n0-future",
  "num_cpus",
  "rand",
@@ -3654,6 +3666,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "uuid",
  "walkdir",
 ]
 
@@ -3663,6 +3676,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytes",
+ "data-encoding",
  "derive_more",
  "getrandom 0.3.4",
  "iroh",

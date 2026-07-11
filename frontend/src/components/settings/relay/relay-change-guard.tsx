@@ -2,7 +2,11 @@ import { useCallback, useRef } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { useTranslation } from '../../../i18n'
 import { getRelayChangeWarningType } from '../../../lib/relay-change-warning'
+import { buildRelayConfigArg } from '../../../lib/relay-config'
+import { reconfigureNodeRelay } from '../../../lib/pairing-api'
 import { useAppSettingStore } from '../../../store/app-setting'
+import { useNodeCapability } from '../../../hooks/useNodeCapability'
+import { IS_DESKTOP } from '@/lib/platform'
 import {
 	AlertDialog,
 	AlertDialogContent,
@@ -19,7 +23,10 @@ import { Button } from '../../ui/button'
 export function RelayChangeGuard() {
 	const { t } = useTranslation()
 	const relayMode = useAppSettingStore((s) => s.relayMode)
+	const relayUrls = useAppSettingStore((s) => s.relayUrls)
+	const relayAuthToken = useAppSettingStore((s) => s.relayAuthToken)
 	const relayFallback = useAppSettingStore((s) => s.relayFallback)
+	const { isNodeReady } = useNodeCapability()
 
 	// The mode the user arrived in settings with. Comparing against this means we
 	// only warn on an actual change and never nag users who already had a
@@ -57,7 +64,21 @@ export function RelayChangeGuard() {
 	}
 
 	const confirmLeave = () => {
-		if (blocker.state === 'blocked') blocker.proceed()
+		if (blocker.state === 'blocked') {
+			blocker.proceed()
+			if (IS_DESKTOP && isNodeReady) {
+				void reconfigureNodeRelay(
+					buildRelayConfigArg({
+						relayMode,
+						relayUrls,
+						relayAuthToken,
+						relayFallback,
+					})
+				).catch((error) => {
+					console.warn('Failed to reconfigure device node relay:', error)
+				})
+			}
+		}
 	}
 
 	return (
@@ -78,6 +99,13 @@ export function RelayChangeGuard() {
 						{warningType === 'disabled'
 							? t('settings.network.relay.confirmDisableDescription')
 							: t('settings.network.relay.confirmCustomDescriptionWithPolicy')}
+						{IS_DESKTOP && isNodeReady ? (
+							<>
+								<br />
+								<br />
+								{t('common:settings.devices.relayChangePairedHint')}
+							</>
+						) : null}
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>

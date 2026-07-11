@@ -39,6 +39,9 @@ export function Sender({ onTransferStateChange }: SenderProps) {
 		transferProgress,
 		isBroadcastMode,
 		activeConnectionCount,
+		pairedDevices,
+		isNodeReady,
+		onInvitePairedDevice,
 		handleFileSelect,
 		handleFilesSelect,
 		clearSelectedPath,
@@ -137,6 +140,9 @@ export function Sender({ onTransferStateChange }: SenderProps) {
 							transferProgress={transferProgress}
 							isBroadcastMode={isBroadcastMode}
 							activeConnectionCount={activeConnectionCount}
+							pairedDevices={pairedDevices}
+							isNodeReady={isNodeReady}
+							onInvitePairedDevice={onInvitePairedDevice}
 							onStartSharing={startSharing}
 							onStopSharing={stopSharing}
 							onCopyTicket={copyTicket}

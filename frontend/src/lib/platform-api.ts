@@ -225,6 +225,19 @@ function invokeWebStub<T>(cmd: string, args?: Record<string, unknown>): T {
 		}
 		case 'get_sharing_status':
 			return getWebSharingTicket() as T
+		case 'get_node_status':
+			return { status: 'unavailable', reason: 'desktop_only' } as T
+		case 'get_device_info':
+			return null as T
+		case 'list_paired_devices':
+			return [] as T
+		case 'start_pairing_host':
+		case 'join_pairing':
+		case 'forget_paired_device':
+		case 'invite_paired_device':
+		case 'stop_pairing_host':
+		case 'reconfigure_node_relay':
+			return undefined as T
 		case 'toggle_context_menu':
 		case 'plugin:native-utils|select_send_document':
 		case 'plugin:native-utils|select_send_folder':

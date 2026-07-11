@@ -3,8 +3,8 @@ use crate::state::{AppStateMutex, ShareHandle};
 use engine::{
     download, fetch_metadata, get_relay_status as engine_get_relay_status,
     resolve_relay_mode_with_fallback, start_share_items, verify_relays as engine_verify_relays,
-    AddrInfoOptions, AppHandle, EventEmitter, FileMetadata, FilePreviewItem, ReceiveOptions,
-    SendOptions,
+    DeviceInfo, NodeService, PairedDevice, AddrInfoOptions, AppHandle, EventEmitter, FileMetadata,
+    FilePreviewItem, ReceiveOptions, SendOptions,
 };
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -149,7 +149,7 @@ pub async fn send_items(
         });
         let boxed_handle: AppHandle = Some(emitter);
 
-        // Start sharing multiple files/folders via core send pipeline.
+        // Ephemeral share — relay settings apply per session (all platforms including Android).
         let result = start_share_items(path_bufs.clone(), options, &boxed_handle, Some(metadata))
             .await
             .map_err(|e| format!("Failed to start sharing: {}", e))?;
@@ -288,7 +288,6 @@ pub async fn stop_sharing(state: State<'_, AppStateMutex>) -> Result<(), String>
     let mut app_state = state.lock().await;
 
     if let Some(mut share) = app_state.current_share.take() {
-        // Explicitly clean up the share session
         if let Err(e) = share.stop().await {
             return Err(e);
         }
@@ -587,6 +586,187 @@ async fn collect_preview_items(paths: &[PathBuf]) -> Result<Vec<FilePreviewItem>
 #[tauri::command]
 pub async fn verify_relays(relay: RelayConfigArg) -> Result<VerifyRelaysResponse, String> {
     engine_verify_relays(relay).await
+}
+
+#[cfg(desktop)]
+pub async fn init_node_service(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let (relay_mode, _) = resolve_relay_mode_with_fallback(None).await?;
+    let relay_mode: iroh::endpoint::RelayMode = relay_mode.into();
+    let emitter = Arc::new(TauriEventEmitter {
+        app_handle: app_handle.clone(),
+    });
+    let boxed_handle: AppHandle = Some(emitter);
+    let node = NodeService::start(&data_dir, relay_mode, boxed_handle)
+        .await
+        .map_err(|e| format!("Failed to start device node: {e}"))?;
+    let state = app_handle.state::<AppStateMutex>();
+    let mut guard = state.lock().await;
+    guard.node = Some(Arc::new(node));
+    guard.node_init_error = None;
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+pub struct NodeStatusResponse {
+    pub status: String,
+    pub reason: Option<String>,
+}
+
+#[cfg(desktop)]
+fn node_status_from_state(guard: &crate::state::AppState) -> NodeStatusResponse {
+    if guard.node.is_some() {
+        return NodeStatusResponse {
+            status: "ready".to_string(),
+            reason: None,
+        };
+    }
+    NodeStatusResponse {
+        status: "unavailable".to_string(),
+        reason: guard.node_init_error.clone(),
+    }
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn get_node_status(state: State<'_, AppStateMutex>) -> Result<NodeStatusResponse, String> {
+    let guard = state.lock().await;
+    Ok(node_status_from_state(&guard))
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn reconfigure_node_relay(
+    relay: Option<RelayConfigArg>,
+    state: State<'_, AppStateMutex>,
+) -> Result<(), String> {
+    let (relay_mode, _) = resolve_relay_mode_with_fallback(relay).await?;
+    let relay_mode: iroh::endpoint::RelayMode = relay_mode.into();
+
+    let node = {
+        let guard = state.lock().await;
+        if guard.current_share.is_some() || guard.is_share_starting {
+            return Err(
+                "Stop sharing before changing relay settings for paired devices.".to_string(),
+            );
+        }
+        guard
+            .node
+            .clone()
+            .ok_or_else(|| "Device pairing is not available on this device.".to_string())?
+    };
+
+    node.reconfigure_relay(relay_mode)
+        .await
+        .map_err(|e| format!("Failed to update device relay: {e}"))
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn get_device_info(state: State<'_, AppStateMutex>) -> Result<DeviceInfo, String> {
+    let guard = state.lock().await;
+    let node = guard
+        .node
+        .as_ref()
+        .ok_or_else(|| {
+            guard
+                .node_init_error
+                .clone()
+                .unwrap_or_else(|| "Device pairing is not available.".to_string())
+        })?;
+    Ok(node.device_info())
+}
+
+#[cfg(desktop)]
+fn require_node(guard: &crate::state::AppState) -> Result<&NodeService, String> {
+    guard.node.as_deref().ok_or_else(|| {
+        guard
+            .node_init_error
+            .clone()
+            .unwrap_or_else(|| "Device pairing is not available.".to_string())
+    })
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn start_pairing_host(state: State<'_, AppStateMutex>) -> Result<String, String> {
+    let guard = state.lock().await;
+    let node = require_node(&guard)?;
+    node.start_pairing_host()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn stop_pairing_host(state: State<'_, AppStateMutex>) -> Result<(), String> {
+    let guard = state.lock().await;
+    if let Some(node) = guard.node.as_ref() {
+        node.stop_pairing_host().await;
+    }
+    Ok(())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn join_pairing(
+    ticket: String,
+    state: State<'_, AppStateMutex>,
+) -> Result<(), String> {
+    let guard = state.lock().await;
+    let node = require_node(&guard)?;
+    node.join_pairing(&ticket)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn list_paired_devices(
+    state: State<'_, AppStateMutex>,
+) -> Result<Vec<PairedDevice>, String> {
+    let guard = state.lock().await;
+    let node = require_node(&guard)?;
+    node.list_paired().map_err(|e| e.to_string())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn forget_paired_device(
+    endpoint_id: String,
+    state: State<'_, AppStateMutex>,
+) -> Result<(), String> {
+    let guard = state.lock().await;
+    let node = require_node(&guard)?;
+    node.forget_paired(&endpoint_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+pub struct InviteDelivered {
+    pub delivered: bool,
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn invite_paired_device(
+    endpoint_id: String,
+    blob_ticket: String,
+    file_count: u32,
+    total_size: u64,
+    state: State<'_, AppStateMutex>,
+) -> Result<InviteDelivered, String> {
+    let guard = state.lock().await;
+    let node = require_node(&guard)?;
+    let delivered = node
+        .invite_paired_device(&endpoint_id, &blob_ticket, file_count, total_size)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(InviteDelivered { delivered })
 }
 
 #[cfg(test)]

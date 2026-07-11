@@ -74,10 +74,25 @@
 				"label": "Private sharing",
 				"description": "Only the person you share the ticket with can download the file."
 			}
+		},
+		"pairedDevices": {
+			"connectedTitle": "Connected devices",
+			"yourDevicesTitle": "Send to paired device",
+			"pair": "Pair",
+			"send": "Send",
+			"inviteSent": "Invite sent",
+			"inviteFailed": "Could not reach device",
+			"deviceOffline": "Device is offline — use the manual ticket instead.",
+			"deviceUnreachable": "This device is still paired. Try again when it is online, or use the manual ticket. Both devices may need compatible relay settings.",
+			"unknownPeer": "Unknown device"
 		}
 	},
 	"receiver": {
 		"title": "Receive Files",
+		"receiveFromPairedTitle": "Incoming file from paired device",
+		"receiveFromPairedDescription": "{{sender}} wants to send you {{count}} file(s) ({{size}}). Accept to start downloading.",
+		"acceptInvite": "Accept",
+		"declineInvite": "Decline",
 		"subtitle": "Download files from sender using encrypted peer-to-peer connections over the internet.",
 		"saveToFolder": "Save to folder:",
 		"saveLocation": "Save location:",
@@ -153,6 +168,7 @@
 		"navItems": {
 			"appearance": "Theme & Language",
 			"general": "General",
+			"devices": "Devices",
 			"relay": "Relay",
 			"network": "Network"
 		},
@@ -200,6 +216,31 @@
 					"description": "Display a broadcast switch on the sharing screen so multiple receivers can download the same files at once."
 				}
 			}
+		},
+		"devices": {
+			"title": "Paired devices",
+			"description": "Pair your devices once, then send files without copying tickets.",
+			"desktopOnly": "Device pairing is available on the desktop app only.",
+			"nodeUnavailableTitle": "Device pairing is unavailable",
+			"nodeUnavailableHint": "Manual tickets and file sharing still work normally.",
+			"relayChangePairedHint": "Paired devices stay listed. Paired send may not work until both devices can reach each other on the new network setup.",
+			"pairNewDevice": "Pair new device",
+			"showQrCode": "Show pairing code",
+			"enterCode": "Enter pairing code",
+			"hostHint": "Scan or copy this code on the device you want to pair.",
+			"hostExpiresIn": "Expires in {{seconds}}s.",
+			"joinHint": "Paste the pairing code from your other device.",
+			"codePlaceholder": "Paste pairing code",
+			"pairingCode": "Pairing code",
+			"pairDevice": "Pair",
+			"noPairedDevices": "No paired devices yet",
+			"noPairedDevicesHint": "Pair another phone or computer to send files without sharing tickets each time.",
+			"devicePaired": "Device paired",
+			"pairFailed": "Pairing failed",
+			"deviceRemoved": "Device removed",
+			"removeFailed": "Could not remove device",
+			"removeDevice": "Remove device",
+			"copied": "Pairing code copied"
 		},
 		"network": {
 			"relay": {

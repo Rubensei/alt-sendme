@@ -16,8 +16,7 @@ use state::AppState;
 use std::fs;
 use std::sync::Arc;
 
-use tauri::Emitter as _;
-use tauri::Manager as _;
+use tauri::{Emitter as _, Manager as _, RunEvent};
 
 /// Clean up any orphaned .sendme-* directories from previous runs
 fn cleanup_orphaned_directories() {
@@ -94,9 +93,42 @@ pub fn run() {
             verify_relays,
             get_relay_status,
             toggle_context_menu,
+            #[cfg(desktop)]
+            get_node_status,
+            #[cfg(desktop)]
+            reconfigure_node_relay,
+            #[cfg(desktop)]
+            get_device_info,
+            #[cfg(desktop)]
+            start_pairing_host,
+            #[cfg(desktop)]
+            stop_pairing_host,
+            #[cfg(desktop)]
+            join_pairing,
+            #[cfg(desktop)]
+            list_paired_devices,
+            #[cfg(desktop)]
+            forget_paired_device,
+            #[cfg(desktop)]
+            invite_paired_device,
         ])
         .setup(|app| {
             setup_common(app);
+            #[cfg(desktop)]
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::block_on(async move {
+                    let state = handle.state::<state::AppStateMutex>();
+                    let init_handle = handle.clone();
+                    match init_node_service(init_handle).await {
+                        Ok(()) => {}
+                        Err(error) => {
+                            tracing::error!(%error, "failed to initialize device node");
+                            state.lock().await.node_init_error = Some(error);
+                        }
+                    }
+                });
+            }
             #[cfg(all(desktop, not(target_os = "macos")))]
             if let Err(error) = tray::setup_tray(&app.handle()) {
                 tracing::warn!(
@@ -126,11 +158,25 @@ pub fn run() {
     builder
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|_app, _event| {
+        .run(|app, event| {
+            if matches!(event, RunEvent::Exit) {
+                #[cfg(desktop)]
+                {
+                    let state = app.state::<state::AppStateMutex>();
+                    tauri::async_runtime::block_on(async move {
+                        let mut guard = state.lock().await;
+                        if let Some(node) = guard.node.take() {
+                            if let Err(error) = node.shutdown().await {
+                                tracing::warn!(%error, "node shutdown error");
+                            }
+                        }
+                    });
+                }
+            }
             // RunEvent::Reopen only exists on macOS (dock icon re-click)
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { .. } = _event {
-                tray::open_and_focus(_app);
+            if let RunEvent::Reopen { .. } = event {
+                tray::open_and_focus(app);
             }
         });
 }

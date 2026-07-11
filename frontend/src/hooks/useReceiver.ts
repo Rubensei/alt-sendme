@@ -531,8 +531,8 @@ export function useReceiver(): UseReceiverReturn {
 		}
 	}
 
-	const handleReceive = async () => {
-		if (!ticket.trim()) return
+	const receiveWithTicket = async (ticketValue: string) => {
+		if (!ticketValue.trim()) return
 
 		try {
 			transferItemCountRef.current = previewMetadata?.itemCount
@@ -550,14 +550,11 @@ export function useReceiver(): UseReceiverReturn {
 			folderOpenTriggeredRef.current = false
 
 			await invoke<string>('receive_file', {
-				ticket: ticket.trim(),
+				ticket: ticketValue.trim(),
 				outputPath: savePath,
 				relay: getRelayConfigArg(),
 			})
 		} catch (error) {
-			// "cancelled" is the exact string the backend returns for user-initiated stops.
-			// Check for the exact Tauri-wrapped form so we don't accidentally swallow
-			// unrelated errors whose messages happen to contain the word.
 			if (
 				String(error) === 'cancelled' ||
 				String(error).endsWith(': cancelled')
@@ -579,6 +576,10 @@ export function useReceiver(): UseReceiverReturn {
 			setIsTransporting(false)
 			setIsCompleted(false)
 		}
+	}
+
+	const handleReceive = async () => {
+		await receiveWithTicket(ticket)
 	}
 
 	const resetForNewTransfer = async () => {
