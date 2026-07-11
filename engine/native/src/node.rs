@@ -419,13 +419,17 @@ impl ProtocolHandler for ControlProtocol {
         let this = self.clone();
         let remote = connection.remote_id();
         pairing_dev!("control.incoming", remote = %remote);
-        if let Err(err) = this.handle_connection(connection).await {
-            pairing_dev_warn!(
-                "control.session.error",
-                remote = %remote,
-                error = %err
-            );
-        }
+        // Run the session off the router task so incoming stream events can be
+        // processed while we wait on accept_bi.
+        tokio::spawn(async move {
+            if let Err(err) = this.handle_connection(connection).await {
+                pairing_dev_warn!(
+                    "control.session.error",
+                    remote = %remote,
+                    error = %err
+                );
+            }
+        });
         Ok(())
     }
 }
@@ -728,42 +732,7 @@ impl NodeService {
         pairing_dev!("join.open_bi", host_endpoint = %remote);
         let (mut send, mut recv) = conn.open_bi().await?;
 
-        pairing_dev!("join.read_host_pairing_info", host_endpoint = %remote);
-        let host_info = read_message(&mut recv)
-            .await
-            .context("read host PairingInfo")?;
-        let ControlMessage::PairingInfo {
-            endpoint_id,
-            display_name,
-            device_type,
-            os,
-            signature,
-        } = host_info
-        else {
-            anyhow::bail!("expected host PairingInfo");
-        };
-        let peer_id = EndpointId::from_str(&endpoint_id).context("invalid host endpoint id")?;
-        if !verify_challenge(&peer_id, &keying, &signature) {
-            anyhow::bail!("host PairingInfo signature invalid");
-        }
-        pairing_dev!(
-            "join.host_pairing_info_ok",
-            host_endpoint = %endpoint_id,
-            display_name = %display_name,
-            device_type = %device_type,
-            os = %os
-        );
-        let now = protocol::identity::unix_now_ms();
-        self.paired_store.remember(PairedDevice {
-            endpoint_id: endpoint_id.clone(),
-            display_name: display_name.clone(),
-            device_type: device_type.clone(),
-            os: os.clone(),
-            paired_at: now,
-            last_seen_at: now,
-        })?;
-        self.access.write().await.allowed.insert(peer_id);
-
+        // Send first so the host can accept_bi and begin its side of the handshake.
         let info = ControlMessage::PairingInfo {
             endpoint_id: self.identity.endpoint_id(),
             display_name: self.identity.display_name(),
@@ -793,30 +762,41 @@ impl NodeService {
             vote = ?RememberVote::Remember
         );
 
-        pairing_dev!("join.read_host_remember_vote", host_endpoint = %remote);
-        match read_message(&mut recv).await {
-            Ok(ControlMessage::RememberVote {
-                vote: RememberVote::Remember,
-                ..
-            }) => {
-                pairing_dev!("join.host_remember_vote_ok", host_endpoint = %remote);
-            }
-            Ok(other) => {
-                pairing_dev_warn!(
-                    "join.unexpected_host_message",
-                    host_endpoint = %remote,
-                    kind = ?other
-                );
-            }
-            Err(err) => {
-                pairing_dev_warn!(
-                    "join.read_host_remember_vote_failed",
-                    host_endpoint = %remote,
-                    error = %err
-                );
-            }
+        pairing_dev!("join.read_host_pairing_info", host_endpoint = %remote);
+        let host_info = read_message(&mut recv)
+            .await
+            .context("read host PairingInfo")?;
+        let ControlMessage::PairingInfo {
+            endpoint_id,
+            display_name,
+            device_type,
+            os,
+            signature,
+        } = host_info
+        else {
+            anyhow::bail!("expected host PairingInfo");
+        };
+        let peer_id = EndpointId::from_str(&endpoint_id).context("invalid host endpoint id")?;
+        if !verify_challenge(&peer_id, &keying, &signature) {
+            anyhow::bail!("host PairingInfo signature invalid");
         }
-
+        pairing_dev!(
+            "join.host_pairing_info_ok",
+            host_endpoint = %endpoint_id,
+            display_name = %display_name,
+            device_type = %device_type,
+            os = %os
+        );
+        let now = protocol::identity::unix_now_ms();
+        self.paired_store.remember(PairedDevice {
+            endpoint_id: endpoint_id.clone(),
+            display_name: display_name.clone(),
+            device_type,
+            os,
+            paired_at: now,
+            last_seen_at: now,
+        })?;
+        self.access.write().await.allowed.insert(peer_id);
         pairing_dev!(
             "pair.complete.stored",
             role = "joiner",
