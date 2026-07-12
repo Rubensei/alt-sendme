@@ -97,24 +97,14 @@
 			"unknownPeer": "Unknown device"
 		},
 		"sharingActive": {
-			"tabs": {
-				"devices": "My devices",
-				"link": "One-time transfer"
-			},
+			"devicesButton": "Paired Devices",
 			"devices": {
 				"title": "Send to a paired device",
 				"hint": "Choose a device — the transfer starts when they accept.",
 				"emptyTitle": "No paired devices yet",
-				"emptyHint": "Pair a phone or computer to send files without sharing a link each time.",
-				"pairDevice": "Pair device",
+				"emptyHint": "Pair devices in Settings, then return here to send without a link.",
 				"nodeUnavailable": "Device sending is unavailable right now. You can still use One-time transfer from the other tab.",
-				"addDeviceTitle": "Add a device",
-				"addDeviceHint": "Copy the pairing code and paste it on the receiving device to pair before sending.",
-				"pairingCodeLabel": "Pairing code",
-				"pairingCodeReady": "Pairing code ready",
-				"copyPairingCode": "Copy pairing code",
-				"manageInSettings": "Manage devices in Settings",
-				"pairingUnavailable": "Could not start device pairing. You can still share via One-time transfer."
+				"manageInSettings": "Pair devices in Settings"
 			},
 			"link": {
 				"waiting": "Waiting for someone to use your link",

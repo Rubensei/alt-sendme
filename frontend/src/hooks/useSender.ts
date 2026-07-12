@@ -15,8 +15,6 @@ import {
 	invitePairedDevice,
 	isPairedDeviceActive,
 	listPairedDevices,
-	startPairingHost,
-	stopPairingHost,
 	type PairedDevice,
 } from '@/lib/pairing-api'
 import { useNodeCapability } from '@/hooks/useNodeCapability'
@@ -52,9 +50,6 @@ export interface UseSenderReturn {
 	isNodeReady: boolean
 	pairedInviteStatus: Record<string, PairedInviteStatus>
 	onInvitePairedDevice: (endpointId: string) => Promise<void>
-	pairingTicket: string | null
-	pairingCopySuccess: boolean
-	onCopyPairingTicket: () => Promise<void>
 
 	handleFileSelect: (
 		path: string,
@@ -110,8 +105,6 @@ export function useSender(): UseSenderReturn {
 	} = useSenderStore()
 
 	const [pairedDevices, setPairedDevices] = useState<PairedDevice[]>([])
-	const [pairingTicket, setPairingTicket] = useState<string | null>(null)
-	const [pairingCopySuccess, setPairingCopySuccess] = useState(false)
 	const [pairedInviteStatus, setPairedInviteStatus] = useState<
 		Record<string, PairedInviteStatus>
 	>({})
@@ -143,21 +136,6 @@ export function useSender(): UseSenderReturn {
 			console.error('Failed to load paired devices:', error)
 		}
 	}, [])
-
-	const clearSharingPairing = useCallback(() => {
-		setPairingTicket(null)
-		setPairingCopySuccess(false)
-	}, [])
-
-	const stopSharingPairing = useCallback(async () => {
-		clearSharingPairing()
-		if (!IS_DESKTOP) return
-		try {
-			await stopPairingHost()
-		} catch (error) {
-			console.warn('Failed to stop sharing pairing host:', error)
-		}
-	}, [clearSharingPairing])
 
 	useEffect(() => {
 		void refreshPairedDevices()
@@ -749,19 +727,6 @@ export function useSender(): UseSenderReturn {
 			// console.log('[useSender] startSharing: got ticket, setting state to SHARING')
 			setTicket(result)
 			setViewState('SHARING')
-
-			if (IS_DESKTOP && isNodeReady) {
-				try {
-					const code = await startPairingHost({ ttlSecs: null })
-					setPairingTicket(code)
-				} catch (error) {
-					console.error('Failed to start sharing pairing host:', error)
-					toastManager.add({
-						title: t('common:sender.sharingActive.devices.pairingUnavailable'),
-						type: 'warning',
-					})
-				}
-			}
 		} catch (error) {
 			console.error('[useSender] startSharing: failed:', error)
 			showAlert(
@@ -858,7 +823,6 @@ export function useSender(): UseSenderReturn {
 			if (isCompletedTransfer) {
 				// console.log('[useSender] stopSharing: completed transfer - resetting to idle')
 				wasManuallyStoppedRef.current = false
-				await stopSharingPairing()
 				resetToIdle()
 				transferStartTimeRef.current = null
 				latestProgressRef.current = null
@@ -870,7 +834,6 @@ export function useSender(): UseSenderReturn {
 				return
 			}
 
-			await stopSharingPairing()
 			await invoke('stop_sharing')
 
 			// If no active transfer (just sharing, waiting for acceptance), reset to idle
@@ -1006,26 +969,6 @@ export function useSender(): UseSenderReturn {
 		}
 	}
 
-	const onCopyPairingTicket = async () => {
-		if (!pairingTicket) return
-		try {
-			await navigator.clipboard.writeText(pairingTicket)
-			setPairingCopySuccess(true)
-			setTimeout(() => setPairingCopySuccess(false), 2000)
-			toastManager.add({
-				title: t('common:settings.devices.copied'),
-				type: 'success',
-			})
-		} catch (error) {
-			console.error('Failed to copy pairing ticket:', error)
-			showAlert(
-				t('common:errors.copyFailed'),
-				`${t('common:errors.copyFailedDesc')}: ${error}`,
-				'error'
-			)
-		}
-	}
-
 	// Derived states for backward compatibility
 	const isSharing = viewState === 'SHARING' || viewState === 'TRANSPORTING'
 	const isTransporting = viewState === 'TRANSPORTING'
@@ -1051,9 +994,6 @@ export function useSender(): UseSenderReturn {
 		isNodeReady,
 		pairedInviteStatus,
 		onInvitePairedDevice,
-		pairingTicket,
-		pairingCopySuccess,
-		onCopyPairingTicket,
 
 		handleFileSelect,
 		handleFilesSelect,

@@ -46,7 +46,7 @@ export function ShareLinkPanel({
 		? t('common:sender.transferCompleted')
 		: isTransporting
 			? t('common:sender.sharingInProgress')
-			: t('common:sender.sharingActive.link.waiting')
+			: t('common:sender.listeningForConnection')
 
 	const clampedProgress = transferProgress
 		? {
@@ -91,6 +91,10 @@ export function ShareLinkPanel({
 					className="flex items-center justify-center"
 				/>
 
+				<p className="text-xs text-center text-muted-foreground">
+					{t('common:sender.keepAppOpen')}
+				</p>
+
 				{!isTransporting && ticket && (
 					<TicketDisplay
 						ticket={ticket}
@@ -106,10 +110,6 @@ export function ShareLinkPanel({
 						<TransferProgressBar progress={progressToDisplay} />
 					</div>
 				)}
-
-				<p className="text-xs text-center text-muted-foreground">
-					{t('common:sender.keepAppOpen')}
-				</p>
 			</div>
 		</div>
 	)
@@ -206,7 +206,7 @@ function TicketDisplay({
 				</InputGroupAddon>
 			</InputGroup>
 			<p className="text-xs text-muted-foreground">
-				{t('common:sender.sharingActive.link.hint')}
+				{t('common:sender.sendThisTicket')}
 			</p>
 		</div>
 	)

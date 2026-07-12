@@ -42,9 +42,6 @@ export interface SharingControlsProps {
 	isNodeReady?: boolean
 	pairedInviteStatus?: Record<string, 'sending' | 'sent' | 'failed'>
 	onInvitePairedDevice?: (endpointId: string) => Promise<void>
-	pairingTicket?: string | null
-	pairingCopySuccess?: boolean
-	onCopyPairingTicket?: () => Promise<void>
 	onStartSharing: () => Promise<void>
 	onStopSharing: () => Promise<void>
 	onCopyTicket: () => Promise<void>
