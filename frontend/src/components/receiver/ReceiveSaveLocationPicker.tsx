@@ -28,7 +28,7 @@ export function ReceiveSaveLocationPicker({
 	const saveLocationHint =
 		IS_WEB && !canPickSaveLocation
 			? t('common:receiver.browserDownloadsHint')
-			: t('common:receiver.saveLocationHint')
+			: null
 
 	return (
 		<div>

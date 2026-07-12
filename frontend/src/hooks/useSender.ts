@@ -969,10 +969,7 @@ export function useSender(): UseSenderReturn {
 				setInviteStatus(endpointId, 'failed')
 				toastManager.add({
 					title: t('common:sender.pairedDevices.inviteFailed'),
-					description:
-						device && !device.online
-							? t('common:sender.pairedDevices.deviceOffline')
-							: t('common:sender.pairedDevices.deviceUnreachable'),
+					description: t('common:sender.pairedDevices.deviceUnreachable'),
 					type: 'error',
 				})
 				setTimeout(() => setInviteStatus(endpointId, null), 4000)

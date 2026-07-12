@@ -16,8 +16,6 @@ import {
 import { ReceivingActiveCard } from './ReceivingActiveCard'
 import { TicketInput } from './TicketInput'
 import { ReceiveSaveLocationPicker } from './ReceiveSaveLocationPicker'
-import { IS_DESKTOP } from '@/lib/platform'
-import { ReceiverPairDevicePanel } from './ReceiverPairDevicePanel'
 import { Button } from '../ui/button'
 
 interface ReceiverProps {
@@ -82,7 +80,6 @@ export function Receiver({ onTransferStateChange }: ReceiverProps) {
 							disabled={isReceiving}
 							onBrowseFolder={handleBrowseFolder}
 						/>
-						{IS_DESKTOP ? <ReceiverPairDevicePanel /> : null}
 						<TicketInput
 							ticket={ticket}
 							isReceiving={isReceiving}

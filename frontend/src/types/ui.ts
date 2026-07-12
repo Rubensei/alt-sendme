@@ -6,5 +6,3 @@ export interface AlertDialogState {
 }
 
 export type AlertType = 'success' | 'error' | 'info'
-
-export type InstructionsCardProps = {}

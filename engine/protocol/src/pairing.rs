@@ -2,10 +2,16 @@
 
 pub const PAIRING_VOTE_TIMEOUT_SECS: u64 = 120;
 
-/// How often the node probes paired devices for reachability.
-pub const PRESENCE_INTERVAL_SECS: u64 = 45;
+/// Minimum backoff between reconnect attempts to a paired device.
+pub const PAIRED_RECONNECT_MIN_SECS: u64 = 5;
 
-/// Connect timeout for a single presence probe.
+/// Maximum backoff between reconnect attempts to a paired device.
+pub const PAIRED_RECONNECT_MAX_SECS: u64 = 60;
+
+/// How long invite delivery waits for a live paired connection.
+pub const PAIRED_INVITE_WAIT_SECS: u64 = 30;
+
+/// Connect timeout for one-off operations (forget notify, fallback connect).
 pub const PRESENCE_CONNECT_TIMEOUT_SECS: u64 = 8;
 
 /// When `ttl_secs` is [`None`], the pairing host stays open until explicitly stopped

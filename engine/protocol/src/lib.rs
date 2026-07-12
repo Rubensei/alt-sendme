@@ -14,8 +14,8 @@ pub use identity::{
     PairedDevice, PairedDeviceList, PairingStatus,
 };
 pub use pairing::{
-    pairing_host_is_persistent, PAIRING_VOTE_TIMEOUT_SECS, PRESENCE_CONNECT_TIMEOUT_SECS,
-    PRESENCE_INTERVAL_SECS,
+    pairing_host_is_persistent, PAIRING_VOTE_TIMEOUT_SECS, PAIRED_INVITE_WAIT_SECS,
+    PAIRED_RECONNECT_MAX_SECS, PAIRED_RECONNECT_MIN_SECS, PRESENCE_CONNECT_TIMEOUT_SECS,
 };
 pub use pairing_auth::{export_connection_keying_material, sign_challenge, verify_challenge};
 pub use receive::{download_to_store, fetch_metadata, DownloadToStoreResult};

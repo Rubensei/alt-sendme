@@ -1,7 +1,9 @@
-//! Temporary verbose tracing for the desktop pairing feature.
-//! Grep terminal output with `pairing-dev`. Safe to delete when pairing stabilizes.
+//! Verbose tracing for the desktop pairing feature.
+//! Grep terminal output with `pairing-dev`. Filter by `flow=` for a subsystem:
+//!   connections | invite | control | pairing | presence | forget | node
 
 use iroh::EndpointAddr;
+use iroh::endpoint::Side;
 use std::time::{Duration, Instant};
 
 #[macro_export]
@@ -16,6 +18,49 @@ macro_rules! pairing_dev_warn {
     ($step:literal $(, $($rest:tt)*)?) => {
         tracing::warn!(target: "pairing-dev", step = $step $(, $($rest)*)?, "pairing-dev")
     };
+}
+
+/// Structured log line: always includes `flow`, `direction`, and `step`.
+#[macro_export]
+macro_rules! pairing_flow {
+    ($flow:expr, $direction:expr, $step:literal $(, $($rest:tt)*)?) => {
+        tracing::info!(
+            target: "pairing-dev",
+            flow = $flow,
+            direction = $direction,
+            step = $step
+            $(, $($rest)*)?,
+            "pairing-dev"
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! pairing_flow_warn {
+    ($flow:expr, $direction:expr, $step:literal $(, $($rest:tt)*)?) => {
+        tracing::warn!(
+            target: "pairing-dev",
+            flow = $flow,
+            direction = $direction,
+            step = $step
+            $(, $($rest)*)?,
+            "pairing-dev"
+        )
+    };
+}
+
+pub fn direction_from_side(side: Side) -> &'static str {
+    match side {
+        Side::Server => "inbound",
+        Side::Client => "outbound",
+    }
+}
+
+pub fn peer_role_from_side(side: Side) -> &'static str {
+    match side {
+        Side::Server => "acceptor",
+        Side::Client => "initiator",
+    }
 }
 
 /// Summarise an [`EndpointAddr`] for logs (relay URLs, IP addrs, total hint count).
@@ -53,6 +98,24 @@ pub fn elapsed_ms(start: Instant) -> u128 {
 pub fn log_pairing_error(step: &str, err: &(impl std::fmt::Display + std::fmt::Debug)) {
     tracing::warn!(
         target: "pairing-dev",
+        step,
+        error = %err,
+        error_detail = %format!("{err:#}"),
+        debug = ?err,
+        "pairing-dev"
+    );
+}
+
+pub fn log_pairing_flow_error(
+    flow: &str,
+    direction: &str,
+    step: &str,
+    err: &(impl std::fmt::Display + std::fmt::Debug),
+) {
+    tracing::warn!(
+        target: "pairing-dev",
+        flow,
+        direction,
         step,
         error = %err,
         error_detail = %format!("{err:#}"),

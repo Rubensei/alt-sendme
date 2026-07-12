@@ -14,7 +14,7 @@ use iroh::{address_lookup::pkarr::PkarrPublisher, EndpointAddr, EndpointId, Tran
 use protocol::{
     apply_options, export_connection_keying_material, read_message, sign_challenge,
     verify_challenge, write_message, AddrInfoOptions, AppHandle, ControlMessage, PairedDevice,
-    PairingStatus, RememberVote, CONTROL_ALPN, PRESENCE_CONNECT_TIMEOUT_SECS, PRESENCE_INTERVAL_SECS,
+    PairingStatus, RememberVote, CONTROL_ALPN, PRESENCE_CONNECT_TIMEOUT_SECS,
 };
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
@@ -23,8 +23,14 @@ use tracing::debug;
 use crate::device_identity::{
     load_or_create_identity, DeviceIdentity, DeviceInfo, PairedDeviceInfo, PairedDeviceStore,
 };
-use crate::pairing_dev_log::{elapsed_ms, format_connect_addr, log_pairing_error};
-use crate::{pairing_dev, pairing_dev_warn};
+use crate::paired_connections::{invite_wait_timeout, PairedConnectionManager};
+use crate::pairing_dev_log::{
+    direction_from_side, elapsed_ms, format_connect_addr, log_pairing_error,
+    log_pairing_flow_error, peer_role_from_side,
+};
+use crate::pairing_util::{build_control_connect_addr, control_message_kind, set_presence};
+use crate::runtime::NodeRuntime;
+use crate::{pairing_dev, pairing_dev_warn, pairing_flow, pairing_flow_warn};
 
 #[derive(Debug)]
 struct AccessState {
@@ -55,18 +61,25 @@ impl EndpointHooks for PairedOnlyHook {
         let access = self.access.read().await;
         let allowed = access.allowed.contains(&remote);
         if access.pairing_host_open || allowed {
-            pairing_dev!(
+            pairing_flow!(
+                "control",
+                direction_from_side(conn.side()),
                 "hook.accept",
                 remote = %remote,
+                conn_side = ?conn.side(),
+                peer_role = peer_role_from_side(conn.side()),
                 pairing_host_open = access.pairing_host_open,
                 peer_in_allowlist = allowed,
                 allowlist_size = access.allowed.len()
             );
             return AfterHandshakeOutcome::accept();
         }
-        pairing_dev_warn!(
+        pairing_flow_warn!(
+            "control",
+            direction_from_side(conn.side()),
             "hook.reject",
             remote = %remote,
+            conn_side = ?conn.side(),
             pairing_host_open = access.pairing_host_open,
             allowlist_size = access.allowed.len(),
             allowlist = ?access.allowed.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
@@ -88,6 +101,7 @@ struct ControlCtx {
     app_handle: AppHandle,
     home_relay_url: Option<String>,
     presence: Arc<std::sync::RwLock<HashMap<String, bool>>>,
+    paired_connections: Arc<PairedConnectionManager>,
 }
 
 #[derive(Clone)]
@@ -110,14 +124,44 @@ impl ControlProtocol {
         let pairing_host_open = self.ctx.access.read().await.pairing_host_open;
         let allowed = self.is_allowed(&remote).await;
         let in_store = self.is_in_paired_store(&remote).await;
-        pairing_dev!(
-            "control.session.start",
+
+        if allowed {
+            pairing_flow!(
+                "control",
+                direction_from_side(conn_side),
+                "session.route.paired",
+                remote = %remote,
+                local = %local,
+                conn_side = ?conn_side,
+                peer_role = peer_role_from_side(conn_side)
+            );
+            return self.handle_paired_peer_connection(conn).await;
+        }
+
+        if !pairing_host_open {
+            pairing_flow_warn!(
+                "control",
+                direction_from_side(conn_side),
+                "session.reject_unauthorized",
+                remote = %remote,
+                local = %local,
+                conn_side = ?conn_side,
+                peer_in_paired_store = in_store,
+                hint = "not_in_allowlist_and_pairing_host_closed"
+            );
+            return Ok(());
+        }
+
+        pairing_flow!(
+            "pairing",
+            direction_from_side(conn_side),
+            "session.start",
             remote = %remote,
             local = %local,
             conn_side = ?conn_side,
+            peer_role = peer_role_from_side(conn_side),
             home_relay = ?self.ctx.home_relay_url,
             pairing_host_open,
-            peer_in_allowlist = allowed,
             peer_in_paired_store = in_store
         );
 
@@ -148,24 +192,16 @@ impl ControlProtocol {
             os: self.ctx.identity.os(),
             signature: sign_challenge(&self.ctx.identity.secret_key, &keying),
         };
-        if !allowed {
-            write_message(&mut send, &our_info)
-                .await
-                .context("write local PairingInfo")?;
-            pairing_dev!(
-                "control.session.sent_pairing_info",
-                remote = %remote,
-                local = %local,
-                display_name = %self.ctx.identity.display_name(),
-                os = %self.ctx.identity.os()
-            );
-        } else {
-            pairing_dev!(
-                "control.session.read_first",
-                remote = %remote,
-                reason = "paired_peer"
-            );
-        }
+        write_message(&mut send, &our_info)
+            .await
+            .context("write local PairingInfo")?;
+        pairing_dev!(
+            "control.session.sent_pairing_info",
+            remote = %remote,
+            local = %local,
+            display_name = %self.ctx.identity.display_name(),
+            os = %self.ctx.identity.os()
+        );
 
         let mut remote_info: Option<ControlMessage> = None;
         let mut remote_vote: Option<RememberVote> = None;
@@ -340,6 +376,7 @@ impl ControlProtocol {
                             &self.ctx.paired_store,
                             &remote.to_string(),
                             true,
+                            "recognition_pairing_host",
                         );
                     } else {
                         pairing_dev_warn!("control.session.recognition_bad_sig", remote = %remote);
@@ -363,6 +400,7 @@ impl ControlProtocol {
                                 &self.ctx.paired_store,
                                 &remote.to_string(),
                                 false,
+                                "forget_pairing_host",
                             );
                             let payload = serde_json::json!({
                                 "endpoint_id": device.endpoint_id,
@@ -409,6 +447,7 @@ impl ControlProtocol {
                     };
                     let _ = self.ctx.paired_store.remember(device);
                     self.allow_peer(remote).await;
+                    self.ctx.paired_connections.refresh().await;
                     pairing_dev!(
                         "pair.complete.stored",
                         remote = %remote,
@@ -427,7 +466,7 @@ impl ControlProtocol {
             }
         }
 
-        if remote_info.is_some() && !allowed {
+        if remote_info.is_some() {
             pairing_dev!(
                 "control.session.send_remember_vote",
                 remote = %remote,
@@ -501,9 +540,339 @@ impl ControlProtocol {
             invite_received,
             had_remote_pairing_info = remote_info.is_some(),
             had_remote_remember_vote = remote_vote.is_some(),
-            peer_was_allowlisted = allowed
+            peer_was_allowlisted = false
         );
         Ok(())
+    }
+
+    async fn handle_paired_peer_connection(&self, conn: Connection) -> anyhow::Result<()> {
+        let session_start = Instant::now();
+        let remote = conn.remote_id();
+        let local = self.ctx.identity.endpoint_id();
+        let endpoint_id = remote.to_string();
+        let conn_side = conn.side();
+        pairing_flow!(
+            "control",
+            direction_from_side(conn_side),
+            "session.paired.start",
+            remote = %remote,
+            local = %local,
+            conn_side = ?conn_side,
+            peer_role = peer_role_from_side(conn_side),
+            home_relay = ?self.ctx.home_relay_url,
+            role = "receiver"
+        );
+
+        self.ctx
+            .paired_connections
+            .register_inbound(&endpoint_id, conn.clone())
+            .await;
+
+        pairing_flow!(
+            "control",
+            direction_from_side(conn_side),
+            "session.paired.export_keying",
+            remote = %remote,
+            role = "receiver"
+        );
+        let keying = match export_connection_keying_material(&conn) {
+            Ok(keying) => keying,
+            Err(err) => {
+                log_pairing_flow_error(
+                    "control",
+                    direction_from_side(conn_side),
+                    "session.paired.keying_failed",
+                    &err,
+                );
+                self.ctx
+                    .paired_connections
+                    .unregister_inbound(&endpoint_id)
+                    .await;
+                return Err(err).context("export keying material for paired session");
+            }
+        };
+
+        let mut bi_index: u32 = 0;
+        loop {
+            bi_index += 1;
+            pairing_flow!(
+                "control",
+                direction_from_side(conn_side),
+                "session.paired.accept_bi.wait",
+                remote = %remote,
+                bi_index,
+                role = "receiver"
+            );
+            let (_send, mut recv) = match conn.accept_bi().await {
+                Ok(streams) => {
+                    pairing_flow!(
+                        "control",
+                        direction_from_side(conn_side),
+                        "session.paired.accept_bi.ok",
+                        remote = %remote,
+                        bi_index,
+                        role = "receiver"
+                    );
+                    streams
+                }
+                Err(err) => {
+                    pairing_flow!(
+                        "control",
+                        direction_from_side(conn_side),
+                        "session.paired.accept_bi.end",
+                        remote = %remote,
+                        bi_index,
+                        error = %err,
+                        role = "receiver"
+                    );
+                    break;
+                }
+            };
+
+            pairing_flow!(
+                "control",
+                direction_from_side(conn_side),
+                "session.paired.read.wait",
+                remote = %remote,
+                bi_index,
+                role = "receiver"
+            );
+            let msg = match read_message(&mut recv).await {
+                Ok(m) => m,
+                Err(err) => {
+                    pairing_flow!(
+                        "control",
+                        direction_from_side(conn_side),
+                        "session.paired.read.failed",
+                        remote = %remote,
+                        bi_index,
+                        error = %err,
+                        role = "receiver"
+                    );
+                    continue;
+                }
+            };
+
+            pairing_flow!(
+                "control",
+                direction_from_side(conn_side),
+                "session.paired.msg.received",
+                remote = %remote,
+                bi_index,
+                kind = control_message_kind(&msg),
+                role = "receiver"
+            );
+            self.handle_paired_control_message(&remote, &keying, msg, conn_side, bi_index)
+                .await;
+        }
+
+        self.ctx
+            .paired_connections
+            .unregister_inbound(&endpoint_id)
+            .await;
+        pairing_flow!(
+            "control",
+            direction_from_side(conn_side),
+            "session.paired.finish",
+            remote = %remote,
+            bi_streams_handled = bi_index,
+            session_ms = elapsed_ms(session_start),
+            role = "receiver"
+        );
+        Ok(())
+    }
+
+    async fn handle_paired_control_message(
+        &self,
+        remote: &EndpointId,
+        keying: &[u8],
+        msg: ControlMessage,
+        conn_side: Side,
+        bi_index: u32,
+    ) {
+        match msg {
+            ControlMessage::Invite {
+                blob_ticket,
+                file_count,
+                total_size,
+                sender_name,
+            } => {
+                pairing_flow!(
+                    "invite",
+                    direction_from_side(conn_side),
+                    "invite.received",
+                    remote = %remote,
+                    bi_index,
+                    file_count,
+                    total_size,
+                    sender_name = %sender_name,
+                    ticket_len = blob_ticket.len(),
+                    role = "receiver"
+                );
+                let payload = serde_json::json!({
+                    "blob_ticket": blob_ticket,
+                    "file_count": file_count,
+                    "total_size": total_size,
+                    "sender_name": sender_name,
+                    "remote_endpoint_id": remote.to_string(),
+                });
+                if let Some(handle) = &self.ctx.app_handle {
+                    pairing_flow!(
+                        "invite",
+                        "inbound",
+                        "invite.emit_ui.start",
+                        remote = %remote,
+                        event = "paired-invite-received",
+                        payload_len = payload.to_string().len(),
+                        role = "receiver"
+                    );
+                    match handle.emit_event_with_payload(
+                        "paired-invite-received",
+                        &payload.to_string(),
+                    ) {
+                        Ok(()) => pairing_flow!(
+                            "invite",
+                            "inbound",
+                            "invite.emit_ui.ok",
+                            remote = %remote,
+                            role = "receiver"
+                        ),
+                        Err(err) => pairing_flow_warn!(
+                            "invite",
+                            "inbound",
+                            "invite.emit_ui.failed",
+                            remote = %remote,
+                            error = %err,
+                            role = "receiver"
+                        ),
+                    }
+                } else {
+                    pairing_flow_warn!(
+                        "invite",
+                        "inbound",
+                        "invite.emit_ui.skipped",
+                        remote = %remote,
+                        reason = "no_app_handle",
+                        role = "receiver"
+                    );
+                }
+            }
+            ControlMessage::Recognition { signature } => {
+                pairing_flow!(
+                    "connections",
+                    direction_from_side(conn_side),
+                    "recognition.received",
+                    remote = %remote,
+                    bi_index,
+                    role = "receiver"
+                );
+                if verify_challenge(remote, keying, &signature) {
+                    pairing_flow!(
+                        "connections",
+                        direction_from_side(conn_side),
+                        "recognition.verified",
+                        remote = %remote,
+                        role = "receiver"
+                    );
+                    let now = protocol::identity::unix_now_ms();
+                    let _ = self
+                        .ctx
+                        .paired_store
+                        .touch(&remote.to_string(), now);
+                    set_presence(
+                        &self.ctx.presence,
+                        &self.ctx.app_handle,
+                        &self.ctx.paired_store,
+                        &remote.to_string(),
+                        true,
+                        "recognition_inbound",
+                    );
+                } else {
+                    pairing_flow_warn!(
+                        "connections",
+                        direction_from_side(conn_side),
+                        "recognition.bad_signature",
+                        remote = %remote,
+                        role = "receiver"
+                    );
+                }
+            }
+            ControlMessage::Forget { signature } => {
+                pairing_flow!(
+                    "forget",
+                    direction_from_side(conn_side),
+                    "forget.received",
+                    remote = %remote,
+                    bi_index,
+                    role = "receiver"
+                );
+                if verify_challenge(remote, keying, &signature) {
+                    pairing_flow!(
+                        "forget",
+                        direction_from_side(conn_side),
+                        "forget.verified",
+                        remote = %remote,
+                        role = "receiver"
+                    );
+                    if let Ok(Some(device)) = self
+                        .ctx
+                        .paired_store
+                        .mark_unpaired_remotely(&remote.to_string())
+                    {
+                        {
+                            let mut access = self.ctx.access.write().await;
+                            access.allowed.remove(remote);
+                        }
+                        set_presence(
+                            &self.ctx.presence,
+                            &self.ctx.app_handle,
+                            &self.ctx.paired_store,
+                            &remote.to_string(),
+                            false,
+                            "forget_inbound",
+                        );
+                        self.ctx.paired_connections.forget(&remote.to_string()).await;
+                        let payload = serde_json::json!({
+                            "endpoint_id": device.endpoint_id,
+                            "display_name": device.display_name,
+                            "reason": "remote",
+                        });
+                        if let Some(handle) = &self.ctx.app_handle {
+                            pairing_flow!(
+                                "forget",
+                                "inbound",
+                                "forget.emit_ui",
+                                remote = %remote,
+                                event = "device-unpaired"
+                            );
+                            let _ = handle.emit_event_with_payload(
+                                "device-unpaired",
+                                &payload.to_string(),
+                            );
+                        }
+                    }
+                } else {
+                    pairing_flow_warn!(
+                        "forget",
+                        direction_from_side(conn_side),
+                        "forget.bad_signature",
+                        remote = %remote,
+                        role = "receiver"
+                    );
+                }
+            }
+            other => {
+                pairing_flow_warn!(
+                    "control",
+                    direction_from_side(conn_side),
+                    "session.paired.unexpected_msg",
+                    remote = %remote,
+                    bi_index,
+                    kind = control_message_kind(&other),
+                    role = "receiver"
+                );
+            }
+        }
     }
 
     async fn is_allowed(&self, remote: &EndpointId) -> bool {
@@ -537,22 +906,29 @@ impl ProtocolHandler for ControlProtocol {
     async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
         let this = self.clone();
         let remote = connection.remote_id();
-        pairing_dev!("control.incoming", remote = %remote);
-        // Run the session off the router task so incoming stream events can be
-        // processed while we wait on accept_bi.
+        let side = connection.side();
+        pairing_flow!(
+            "control",
+            direction_from_side(side),
+            "session.incoming",
+            remote = %remote,
+            conn_side = ?side,
+            peer_role = peer_role_from_side(side),
+            local = %this.ctx.identity.endpoint_id()
+        );
         tokio::spawn(async move {
             if let Err(err) = this.handle_connection(connection).await {
-                log_pairing_error("control.session.error", &err);
+                log_pairing_flow_error("control", "inbound", "session.error", &err);
             }
         });
-        pairing_dev!("control.session.spawned", remote = %remote);
+        pairing_flow!(
+            "control",
+            direction_from_side(side),
+            "session.spawned",
+            remote = %remote
+        );
         Ok(())
     }
-}
-
-struct NodeRuntime {
-    endpoint: Endpoint,
-    router: Router,
 }
 
 pub struct NodeService {
@@ -563,7 +939,8 @@ pub struct NodeService {
     pairing_host_open: Arc<AtomicBool>,
     pairing_host_persistent: Arc<AtomicBool>,
     pairing_expire_task: Mutex<Option<JoinHandle<()>>>,
-    presence_task: Mutex<Option<JoinHandle<()>>>,
+    paired_connections: Arc<PairedConnectionManager>,
+    connections_supervisor: Mutex<Option<JoinHandle<()>>>,
     presence: Arc<std::sync::RwLock<HashMap<String, bool>>>,
     app_handle: AppHandle,
     relay_mode: Mutex<RelayMode>,
@@ -620,6 +997,13 @@ impl NodeService {
         let pairing_host_persistent = Arc::new(AtomicBool::new(false));
         let presence = Arc::new(std::sync::RwLock::new(HashMap::new()));
 
+        let paired_connections = Arc::new(PairedConnectionManager::new(
+            identity.clone(),
+            paired_store.clone(),
+            presence.clone(),
+            app_handle.clone(),
+        ));
+
         let runtime = build_runtime(
             identity.clone(),
             paired_store.clone(),
@@ -627,18 +1011,13 @@ impl NodeService {
             pairing_host_persistent.clone(),
             app_handle.clone(),
             presence.clone(),
+            paired_connections.clone(),
             relay_mode.clone(),
         )
         .await?;
         let runtime = Arc::new(Mutex::new(runtime));
-
-        let presence_task = spawn_presence_monitor(
-            runtime.clone(),
-            identity.clone(),
-            paired_store.clone(),
-            presence.clone(),
-            app_handle.clone(),
-        );
+        paired_connections.attach_runtime(runtime.clone());
+        let connections_supervisor = paired_connections.start();
 
         pairing_dev!(
             "node.init.ready",
@@ -654,7 +1033,8 @@ impl NodeService {
             pairing_host_open,
             pairing_host_persistent,
             pairing_expire_task: Mutex::new(None),
-            presence_task: Mutex::new(Some(presence_task)),
+            paired_connections,
+            connections_supervisor: Mutex::new(Some(connections_supervisor)),
             presence,
             app_handle,
             relay_mode: Mutex::new(relay_mode),
@@ -664,10 +1044,11 @@ impl NodeService {
     pub async fn shutdown(&self) -> anyhow::Result<()> {
         pairing_dev!("node.shutdown.start", local_endpoint = %self.identity.endpoint_id());
         self.stop_pairing_host().await;
-        if let Some(handle) = self.presence_task.lock().await.take() {
+        if let Some(handle) = self.connections_supervisor.lock().await.take() {
             handle.abort();
-            pairing_dev!("presence.monitor_aborted", local_endpoint = %self.identity.endpoint_id());
+            pairing_dev!("connections.supervisor_aborted", local_endpoint = %self.identity.endpoint_id());
         }
+        self.paired_connections.shutdown().await;
         let runtime = self.runtime.lock().await;
         runtime.router.shutdown().await?;
         runtime.endpoint.close().await;
@@ -707,11 +1088,13 @@ impl NodeService {
             self.pairing_host_persistent.clone(),
             self.app_handle.clone(),
             self.presence.clone(),
+            self.paired_connections.clone(),
             relay_mode.clone(),
         )
         .await?;
 
         *runtime = new_runtime;
+        self.paired_connections.refresh().await;
         *self.relay_mode.lock().await = relay_mode;
         pairing_dev!("node.relay.reconfigure_done", local_endpoint = %self.identity.endpoint_id());
         Ok(())
@@ -783,12 +1166,14 @@ impl NodeService {
             );
         }
         self.paired_store.forget(endpoint_id)?;
+        self.paired_connections.forget(endpoint_id).await;
         set_presence(
             &self.presence,
             &self.app_handle,
             &self.paired_store,
             endpoint_id,
             false,
+            "forget_local",
         );
         if let Some(handle) = &self.app_handle {
             let payload = serde_json::json!({
@@ -1046,6 +1431,7 @@ impl NodeService {
             pairing_status: PairingStatus::Active,
         })?;
         self.access.write().await.allowed.insert(peer_id);
+        self.paired_connections.refresh().await;
         pairing_dev!(
             "pair.complete.stored",
             role = "joiner",
@@ -1081,7 +1467,9 @@ impl NodeService {
         let allowlist: Vec<String> = access.allowed.iter().map(|id| id.to_string()).collect();
         drop(access);
 
-        pairing_dev!(
+        pairing_flow!(
+            "invite",
+            "outbound",
             "invite.start",
             local_endpoint = %local,
             remote_endpoint = %remote,
@@ -1090,13 +1478,17 @@ impl NodeService {
             allowlist = ?allowlist,
             file_count,
             total_size,
-            ticket_len = blob_ticket.len()
+            ticket_len = blob_ticket.len(),
+            role = "sender"
         );
         if !in_allowlist {
-            pairing_dev_warn!(
+            pairing_flow_warn!(
+                "invite",
+                "outbound",
                 "invite.abort_not_allowed",
                 remote_endpoint = %remote,
-                allowlist = ?allowlist
+                allowlist = ?allowlist,
+                role = "sender"
             );
             anyhow::bail!("unknown paired device");
         }
@@ -1106,107 +1498,172 @@ impl NodeService {
             .get(remote_endpoint_id)?
             .and_then(|d| d.relay_url);
         let paired_meta = self.paired_store.get(remote_endpoint_id)?;
-        pairing_dev!(
+        pairing_flow!(
+            "invite",
+            "outbound",
             "invite.paired_device",
             remote_endpoint = %remote,
             display_name = paired_meta.as_ref().map(|d| d.display_name.as_str()).unwrap_or("?"),
             stored_relay = ?stored_relay,
-            last_seen_at = paired_meta.as_ref().map(|d| d.last_seen_at)
+            last_seen_at = paired_meta.as_ref().map(|d| d.last_seen_at),
+            role = "sender"
         );
 
-        let runtime = self.runtime.lock().await;
-        let addr = build_control_connect_addr(&runtime.endpoint, remote, stored_relay.as_deref());
-        pairing_dev!(
-            "invite.connect_addr",
+        pairing_flow!(
+            "invite",
+            "outbound",
+            "invite.wait_session.start",
             remote_endpoint = %remote,
-            addr = %format_connect_addr(&addr)
+            timeout_secs = invite_wait_timeout().as_secs(),
+            role = "sender"
         );
-        let local_node = runtime.endpoint.id().to_string();
-        pairing_dev!(
-            "invite.connecting",
-            local_endpoint = %local,
-            local_node = %local_node,
-            remote_endpoint = %remote,
-            timeout_secs = 30
-        );
-        let connect_start = Instant::now();
-        let connect = tokio::time::timeout(
-            Duration::from_secs(30),
-            runtime.endpoint.connect(addr, CONTROL_ALPN),
-        )
-        .await;
-        drop(runtime);
-
-        let conn = match connect {
-            Ok(Ok(conn)) => {
-                pairing_dev!(
-                    "invite.connected",
+        let conn = match self
+            .paired_connections
+            .wait_for_connection(remote_endpoint_id, invite_wait_timeout())
+            .await
+        {
+            Some(conn) => {
+                pairing_flow!(
+                    "invite",
+                    "outbound",
+                    "invite.wait_session.ok",
                     remote_endpoint = %remote,
                     remote_conn = %conn.remote_id(),
-                    conn_side = ?conn.side(),
-                    connect_ms = elapsed_ms(connect_start)
-                );
-                let now = protocol::identity::unix_now_ms();
-                let _ = self.paired_store.touch(remote_endpoint_id, now);
-                set_presence(
-                    &self.presence,
-                    &self.app_handle,
-                    &self.paired_store,
-                    remote_endpoint_id,
-                    true,
+                    source = "persistent_session",
+                    role = "sender"
                 );
                 conn
             }
-            Ok(Err(err)) => {
-                log_pairing_error("invite.connect_failed", &err);
-                pairing_dev!(
-                    "invite.done",
+            None => {
+                pairing_flow!(
+                    "invite",
+                    "outbound",
+                    "invite.wait_session.miss",
                     remote_endpoint = %remote,
-                    delivered = false,
-                    reason = "connect_failed",
-                    total_ms = elapsed_ms(invite_start),
-                    hint = "target endpoint may be stale after identity rotation; re-pair required"
+                    source = "fallback_connect",
+                    timeout_secs = PRESENCE_CONNECT_TIMEOUT_SECS,
+                    role = "sender"
                 );
-                return Ok(false);
-            }
-            Err(_) => {
-                pairing_dev_warn!(
-                    "invite.connect_timeout",
+                let connect_start = Instant::now();
+                let runtime = self.runtime.lock().await;
+                let addr = build_control_connect_addr(
+                    &runtime.endpoint,
+                    remote,
+                    stored_relay.as_deref(),
+                    "invite",
+                );
+                pairing_flow!(
+                    "invite",
+                    "outbound",
+                    "invite.connect.start",
                     remote_endpoint = %remote,
-                    timeout_secs = 30,
-                    elapsed_ms = elapsed_ms(connect_start),
-                    hint = "target endpoint may be offline or stale after identity rotation; verify paired device endpoint_id matches peer's current identity"
+                    addr = %format_connect_addr(&addr),
+                    timeout_secs = PRESENCE_CONNECT_TIMEOUT_SECS,
+                    role = "sender"
                 );
-                pairing_dev!(
-                    "invite.done",
-                    remote_endpoint = %remote,
-                    delivered = false,
-                    reason = "connect_timeout",
-                    total_ms = elapsed_ms(invite_start)
-                );
-                return Ok(false);
+                let connect = tokio::time::timeout(
+                    Duration::from_secs(PRESENCE_CONNECT_TIMEOUT_SECS),
+                    runtime.endpoint.connect(addr, CONTROL_ALPN),
+                )
+                .await;
+                drop(runtime);
+                match connect {
+                    Ok(Ok(conn)) => {
+                        pairing_flow!(
+                            "invite",
+                            "outbound",
+                            "invite.connect.ok",
+                            remote_endpoint = %remote,
+                            remote_conn = %conn.remote_id(),
+                            source = "fallback",
+                            connect_ms = elapsed_ms(connect_start),
+                            role = "sender"
+                        );
+                        let now = protocol::identity::unix_now_ms();
+                        let _ = self.paired_store.touch(remote_endpoint_id, now);
+                        set_presence(
+                            &self.presence,
+                            &self.app_handle,
+                            &self.paired_store,
+                            remote_endpoint_id,
+                            true,
+                            "invite_fallback_connect",
+                        );
+                        conn
+                    }
+                    Ok(Err(err)) => {
+                        log_pairing_flow_error("invite", "outbound", "invite.connect.failed", &err);
+                        pairing_flow!(
+                            "invite",
+                            "outbound",
+                            "invite.done",
+                            remote_endpoint = %remote,
+                            delivered = false,
+                            reason = "connect_failed",
+                            total_ms = elapsed_ms(invite_start),
+                            hint = "target endpoint may be stale after identity rotation; re-pair required",
+                            role = "sender"
+                        );
+                        return Ok(false);
+                    }
+                    Err(_) => {
+                        pairing_flow_warn!(
+                            "invite",
+                            "outbound",
+                            "invite.connect.timeout",
+                            remote_endpoint = %remote,
+                            timeout_secs = PRESENCE_CONNECT_TIMEOUT_SECS,
+                            elapsed_ms = elapsed_ms(connect_start),
+                            hint = "target endpoint may be offline or stale after identity rotation; verify paired device endpoint_id matches peer's current identity",
+                            role = "sender"
+                        );
+                        pairing_flow!(
+                            "invite",
+                            "outbound",
+                            "invite.done",
+                            remote_endpoint = %remote,
+                            delivered = false,
+                            reason = "connect_timeout",
+                            total_ms = elapsed_ms(invite_start),
+                            role = "sender"
+                        );
+                        return Ok(false);
+                    }
+                }
             }
         };
 
-        pairing_dev!("invite.open_bi", remote_endpoint = %remote);
+        pairing_flow!(
+            "invite",
+            "outbound",
+            "invite.open_bi.start",
+            remote_endpoint = %remote,
+            role = "sender"
+        );
         let bi_start = Instant::now();
         let (mut send, _recv) = match conn.open_bi().await {
             Ok(streams) => {
-                pairing_dev!(
-                    "invite.bi_ready",
+                pairing_flow!(
+                    "invite",
+                    "outbound",
+                    "invite.open_bi.ok",
                     remote_endpoint = %remote,
-                    open_bi_ms = elapsed_ms(bi_start)
+                    open_bi_ms = elapsed_ms(bi_start),
+                    role = "sender"
                 );
                 streams
             }
             Err(err) => {
-                log_pairing_error("invite.open_bi_failed", &err);
-                pairing_dev!(
+                log_pairing_flow_error("invite", "outbound", "invite.open_bi.failed", &err);
+                pairing_flow!(
+                    "invite",
+                    "outbound",
                     "invite.done",
                     remote_endpoint = %remote,
                     delivered = false,
                     reason = "open_bi_failed",
-                    total_ms = elapsed_ms(invite_start)
+                    total_ms = elapsed_ms(invite_start),
+                    role = "sender"
                 );
                 return Err(err).context("open bi stream for invite");
             }
@@ -1220,101 +1677,66 @@ impl NodeService {
         };
         let write_start = Instant::now();
         if let Err(err) = write_message(&mut send, &invite).await {
-            log_pairing_error("invite.write_failed", &err);
+            log_pairing_flow_error("invite", "outbound", "invite.write.failed", &err);
             return Err(err).context("write Invite message");
         }
-        pairing_dev!(
-            "invite.sent",
+        pairing_flow!(
+            "invite",
+            "outbound",
+            "invite.write.ok",
             remote_endpoint = %remote,
             file_count,
             total_size,
             sender_name = %self.identity.display_name(),
-            write_ms = elapsed_ms(write_start)
+            write_ms = elapsed_ms(write_start),
+            role = "sender"
         );
         // Hold the connection in the background so the receiver can read the
         // invite, without blocking the caller (the UI needs a fast result).
         drop(send);
         tokio::spawn(async move {
-            pairing_dev!(
-                "invite.wait_receiver",
+            pairing_flow!(
+                "invite",
+                "outbound",
+                "invite.wait_receiver.start",
                 remote_endpoint = %remote,
-                timeout_secs = 15
+                timeout_secs = 15,
+                role = "sender"
             );
             let wait_start = Instant::now();
             match tokio::time::timeout(Duration::from_secs(15), conn.closed()).await {
-                Ok(closed) => pairing_dev!(
-                    "invite.receiver_closed",
+                Ok(closed) => pairing_flow!(
+                    "invite",
+                    "outbound",
+                    "invite.wait_receiver.closed",
                     remote_endpoint = %remote,
                     close_reason = ?closed,
-                    wait_ms = elapsed_ms(wait_start)
+                    wait_ms = elapsed_ms(wait_start),
+                    role = "sender"
                 ),
                 // Expected when the receiver keeps the session open while it
                 // downloads; the invite itself was already delivered.
-                Err(_) => pairing_dev!(
-                    "invite.receiver_wait_timeout",
+                Err(_) => pairing_flow!(
+                    "invite",
+                    "outbound",
+                    "invite.wait_receiver.timeout",
                     remote_endpoint = %remote,
-                    wait_ms = elapsed_ms(wait_start)
+                    wait_ms = elapsed_ms(wait_start),
+                    role = "sender"
                 ),
             }
         });
-        pairing_dev!(
+        pairing_flow!(
+            "invite",
+            "outbound",
             "invite.done",
             remote_endpoint = %remote,
             delivered = true,
-            total_ms = elapsed_ms(invite_start)
+            total_ms = elapsed_ms(invite_start),
+            role = "sender"
         );
         Ok(true)
     }
-}
-
-fn build_control_connect_addr(
-    endpoint: &Endpoint,
-    remote: EndpointId,
-    stored_relay: Option<&str>,
-) -> EndpointAddr {
-    let mut addr = EndpointAddr::from(remote);
-    if let Some(relay) = stored_relay {
-        if let Ok(url) = relay.parse() {
-            addr.addrs.insert(TransportAddr::Relay(url));
-            pairing_dev!(
-                "connect.relay_hint",
-                remote = %remote,
-                relay = %relay,
-                source = "paired_store"
-            );
-        } else {
-            pairing_dev_warn!(
-                "connect.relay_hint_invalid",
-                remote = %remote,
-                relay = %relay,
-                source = "paired_store"
-            );
-        }
-    } else {
-        pairing_dev!(
-            "connect.relay_hint_missing",
-            remote = %remote,
-            source = "paired_store"
-        );
-    }
-    let mut local = endpoint.addr();
-    apply_options(&mut local, AddrInfoOptions::Relay);
-    if let Some(relay) = local.relay_urls().next() {
-        let relay_str = relay.to_string();
-        addr.addrs.insert(TransportAddr::Relay(relay.clone()));
-        pairing_dev!(
-            "connect.relay_hint",
-            remote = %remote,
-            relay = %relay_str,
-            source = "local_home"
-        );
-    }
-    pairing_dev!(
-        "connect.addr_built",
-        remote = %remote,
-        addr = %format_connect_addr(&addr)
-    );
-    addr
 }
 
 fn load_allowed_from_store(paired_store: &PairedDeviceStore) -> anyhow::Result<HashSet<EndpointId>> {
@@ -1345,129 +1767,35 @@ fn load_allowed_from_store(paired_store: &PairedDeviceStore) -> anyhow::Result<H
     Ok(allowed)
 }
 
-fn set_presence(
-    presence: &Arc<std::sync::RwLock<HashMap<String, bool>>>,
-    app_handle: &AppHandle,
-    paired_store: &PairedDeviceStore,
-    endpoint_id: &str,
-    online: bool,
-) {
-    let changed = {
-        let mut map = presence.write().expect("presence lock");
-        let key = endpoint_id.to_lowercase();
-        let prev = map.get(&key).copied();
-        if prev == Some(online) {
-            false
-        } else {
-            map.insert(key, online);
-            true
-        }
-    };
-    if !changed {
-        return;
-    }
-    let last_seen_at = paired_store
-        .get(endpoint_id)
-        .ok()
-        .flatten()
-        .map(|d| d.last_seen_at)
-        .unwrap_or(0);
-    let payload = serde_json::json!({
-        "endpoint_id": endpoint_id,
-        "online": online,
-        "last_seen_at": last_seen_at,
-    });
-    if let Some(handle) = app_handle {
-        let _ = handle.emit_event_with_payload("paired-device-presence", &payload.to_string());
-    }
-}
-
-fn spawn_presence_monitor(
-    runtime: Arc<Mutex<NodeRuntime>>,
-    identity: Arc<DeviceIdentity>,
-    paired_store: Arc<PairedDeviceStore>,
-    presence: Arc<std::sync::RwLock<HashMap<String, bool>>>,
-    app_handle: AppHandle,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(Duration::from_secs(PRESENCE_INTERVAL_SECS)).await;
-            let devices = match paired_store.list() {
-                Ok(devices) => devices,
-                Err(err) => {
-                    log_pairing_error("presence.list_failed", &err);
-                    continue;
-                }
-            };
-            for device in devices {
-                if !device.pairing_status.is_active() {
-                    pairing_dev!(
-                        "presence.probe.skip",
-                        remote = %device.endpoint_id,
-                        display_name = %device.display_name,
-                        reason = "unpaired_remotely"
-                    );
-                    set_presence(
-                        &presence,
-                        &app_handle,
-                        &paired_store,
-                        &device.endpoint_id,
-                        false,
-                    );
-                    continue;
-                }
-                pairing_dev!(
-                    "presence.probe.start",
-                    remote = %device.endpoint_id,
-                    display_name = %device.display_name,
-                    stored_relay = ?device.relay_url
-                );
-                let online = probe_peer_presence(
-                    &runtime,
-                    &identity,
-                    &device.endpoint_id,
-                    device.relay_url.as_deref(),
-                )
-                .await;
-                pairing_dev!(
-                    "presence.probe.done",
-                    remote = %device.endpoint_id,
-                    online
-                );
-                if online {
-                    let now = protocol::identity::unix_now_ms();
-                    let _ = paired_store.touch(&device.endpoint_id, now);
-                }
-                set_presence(
-                    &presence,
-                    &app_handle,
-                    &paired_store,
-                    &device.endpoint_id,
-                    online,
-                );
-            }
-        }
-    })
-}
-
-async fn probe_peer_presence(
+async fn send_forget_to_peer(
     runtime: &Arc<Mutex<NodeRuntime>>,
     identity: &DeviceIdentity,
     endpoint_id: &str,
     stored_relay: Option<&str>,
-) -> bool {
-    let remote = match EndpointId::from_str(endpoint_id) {
-        Ok(id) => id,
-        Err(_) => {
-            pairing_dev_warn!(
-                "presence.probe.invalid_endpoint",
-                remote = %endpoint_id
-            );
-            return false;
-        }
-    };
+) -> anyhow::Result<()> {
+    let remote = EndpointId::from_str(endpoint_id)?;
+    pairing_flow!(
+        "forget",
+        "outbound",
+        "forget.notify.start",
+        remote_endpoint = %remote,
+        stored_relay = ?stored_relay
+    );
     let runtime_guard = runtime.lock().await;
-    let addr = build_control_connect_addr(&runtime_guard.endpoint, remote, stored_relay);
+    let addr = build_control_connect_addr(
+        &runtime_guard.endpoint,
+        remote,
+        stored_relay,
+        "forget",
+    );
+    pairing_flow!(
+        "forget",
+        "outbound",
+        "forget.connect.start",
+        remote_endpoint = %remote,
+        addr = %format_connect_addr(&addr),
+        timeout_secs = PRESENCE_CONNECT_TIMEOUT_SECS
+    );
     let connect_start = Instant::now();
     let connect = tokio::time::timeout(
         Duration::from_secs(PRESENCE_CONNECT_TIMEOUT_SECS),
@@ -1478,82 +1806,37 @@ async fn probe_peer_presence(
 
     let conn = match connect {
         Ok(Ok(conn)) => {
-            pairing_dev!(
-                "presence.probe.connected",
-                remote = %endpoint_id,
+            pairing_flow!(
+                "forget",
+                "outbound",
+                "forget.connect.ok",
+                remote_endpoint = %remote,
                 connect_ms = elapsed_ms(connect_start)
             );
             conn
         }
         Ok(Err(err)) => {
-            log_pairing_error("presence.probe.connect_failed", &err);
-            pairing_dev!(
-                "presence.probe.connect_failed",
-                remote = %endpoint_id,
-                connect_ms = elapsed_ms(connect_start)
-            );
-            return false;
+            log_pairing_flow_error("forget", "outbound", "forget.connect.failed", &err);
+            return Err(err).context("forget connect failed");
         }
         Err(_) => {
-            pairing_dev!(
-                "presence.probe.connect_timeout",
-                remote = %endpoint_id,
+            pairing_flow_warn!(
+                "forget",
+                "outbound",
+                "forget.connect.timeout",
+                remote_endpoint = %remote,
                 timeout_secs = PRESENCE_CONNECT_TIMEOUT_SECS,
-                connect_ms = elapsed_ms(connect_start),
-                hint = "endpoint may be offline or stale after identity rotation"
+                elapsed_ms = elapsed_ms(connect_start)
             );
-            return false;
+            anyhow::bail!("forget connect timeout");
         }
     };
-
-    let keying = match export_connection_keying_material(&conn) {
-        Ok(keying) => keying,
-        Err(err) => {
-            log_pairing_error("presence.probe.keying_failed", &err);
-            return false;
-        }
-    };
-    let (mut send, _recv) = match conn.open_bi().await {
-        Ok(streams) => streams,
-        Err(err) => {
-            log_pairing_error("presence.probe.open_bi_failed", &err);
-            return false;
-        }
-    };
-    let recognition = ControlMessage::Recognition {
-        signature: sign_challenge(&identity.secret_key, &keying),
-    };
-    if write_message(&mut send, &recognition).await.is_ok() {
-        pairing_dev!("presence.probe.recognition_sent", remote = %endpoint_id);
-        true
-    } else {
-        pairing_dev_warn!(
-            "presence.probe.recognition_failed",
-            remote = %endpoint_id
-        );
-        false
-    }
-}
-
-async fn send_forget_to_peer(
-    runtime: &Arc<Mutex<NodeRuntime>>,
-    identity: &DeviceIdentity,
-    endpoint_id: &str,
-    stored_relay: Option<&str>,
-) -> anyhow::Result<()> {
-    let remote = EndpointId::from_str(endpoint_id)?;
-    let runtime_guard = runtime.lock().await;
-    let addr = build_control_connect_addr(&runtime_guard.endpoint, remote, stored_relay);
-    let connect = tokio::time::timeout(
-        Duration::from_secs(PRESENCE_CONNECT_TIMEOUT_SECS),
-        runtime_guard.endpoint.connect(addr, CONTROL_ALPN),
-    )
-    .await;
-    drop(runtime_guard);
-
-    let conn = connect
-        .context("forget connect timeout")?
-        .context("forget connect failed")?;
+    pairing_flow!(
+        "forget",
+        "outbound",
+        "forget.open_bi.start",
+        remote_endpoint = %remote
+    );
     let keying = export_connection_keying_material(&conn)?;
     let (mut send, _recv) = conn.open_bi().await.context("forget open bi")?;
     let forget = ControlMessage::Forget {
@@ -1562,6 +1845,12 @@ async fn send_forget_to_peer(
     write_message(&mut send, &forget)
         .await
         .context("forget write message")?;
+    pairing_flow!(
+        "forget",
+        "outbound",
+        "forget.notify.sent",
+        remote_endpoint = %remote
+    );
     Ok(())
 }
 
@@ -1572,6 +1861,7 @@ async fn build_runtime(
     pairing_host_persistent: Arc<AtomicBool>,
     app_handle: AppHandle,
     presence: Arc<std::sync::RwLock<HashMap<String, bool>>>,
+    paired_connections: Arc<PairedConnectionManager>,
     relay_mode: RelayMode,
 ) -> anyhow::Result<NodeRuntime> {
     pairing_dev!(
@@ -1617,6 +1907,7 @@ async fn build_runtime(
             app_handle,
             home_relay_url,
             presence,
+            paired_connections,
         },
     };
 

@@ -24,7 +24,7 @@ pub struct DeviceIdentity {
 
 impl DeviceIdentity {
     pub fn endpoint_id(&self) -> String {
-        self.meta.read().expect("device meta lock").endpoint_id.clone()
+        HEXLOWER.encode(self.secret_key.public().as_bytes())
     }
 
     pub fn display_name(&self) -> String {
@@ -256,7 +256,7 @@ pub fn load_or_create_identity(data_dir: &Path) -> anyhow::Result<DeviceIdentity
         if meta.endpoint_id.to_lowercase() != endpoint_id {
             identity_rotated = true;
             previous_endpoint_id = Some(meta.endpoint_id.clone());
-            tracing::warn!("device.json endpoint_id mismatch; updating to keychain identity");
+            tracing::warn!("device.json endpoint_id mismatch; syncing to keychain identity");
             tracing::info!(
                 target: "pairing-dev",
                 step = "identity.endpoint_mismatch",

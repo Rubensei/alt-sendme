@@ -168,9 +168,6 @@ export function TicketInput({
 				<p id="ticket-input-label" className="block text-sm font-medium mb-1">
 					{t('common:receiver.pasteTicket')}
 				</p>
-				<p className="mb-2 text-xs text-muted-foreground">
-					{t('common:receiver.pasteTicketHint')}
-				</p>
 				<div className="flex gap-2 p-0.5">
 					<Textarea
 						aria-labelledby="ticket-input-label"
