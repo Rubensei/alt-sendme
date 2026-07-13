@@ -15,14 +15,13 @@ import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
 import { Textarea } from '../../ui/textarea'
 import { toastManager } from '../../ui/toast'
-import {
-	Frame,
-	FrameDescription,
-	FramePanel,
-	FrameTitle,
-} from '../../ui/frame'
+import { Frame, FrameDescription, FramePanel, FrameTitle } from '../../ui/frame'
 import { IS_DESKTOP } from '@/lib/platform'
-import { deviceSubtitle, isPairedDeviceActive, matchesPairedDeviceSearch } from '@/lib/pairing-api'
+import {
+	deviceSubtitle,
+	isPairedDeviceActive,
+	matchesPairedDeviceSearch,
+} from '@/lib/pairing-api'
 import { deviceTypeIcon } from '@/lib/device-icon'
 import { DevicePairingStatus } from '../../pairing/DevicePairingStatus'
 import { PairedDevicesSearchField } from '../../pairing/PairedDevicesSearchField'
@@ -100,11 +99,7 @@ function PairHostModal({
 					</Button>
 				</div>
 				<AlertDialogFooter>
-					<Button
-						type="button"
-						variant="outline"
-						onClick={onCancelPairing}
-					>
+					<Button type="button" variant="outline" onClick={onCancelPairing}>
 						{t('common:settings.devices.cancelPairing')}
 					</Button>
 					<Button type="button" onClick={onDismiss}>
@@ -319,9 +314,7 @@ export function DevicesSettings() {
 
 	const sortedDevices = useMemo(
 		() =>
-			[...devices].sort((a, b) =>
-				a.display_name.localeCompare(b.display_name)
-			),
+			[...devices].sort((a, b) => a.display_name.localeCompare(b.display_name)),
 		[devices]
 	)
 
@@ -475,7 +468,10 @@ export function DevicesSettings() {
 						</div>
 					</div>
 
-					{pairingTicket && hostExpiresIn != null && hostExpiresIn > 0 && !hostOpen ? (
+					{pairingTicket &&
+					hostExpiresIn != null &&
+					hostExpiresIn > 0 &&
+					!hostOpen ? (
 						<div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2 text-sm">
 							<p className="text-muted-foreground">
 								{t('common:settings.devices.hostStillOpen', {
@@ -561,7 +557,9 @@ export function DevicesSettings() {
 															variant="ghost"
 															size="icon-sm"
 															aria-label={t('common:settings.devices.rename')}
-															onClick={() => setRenamePeerId(device.endpoint_id)}
+															onClick={() =>
+																setRenamePeerId(device.endpoint_id)
+															}
 														>
 															<Pencil className="w-4 h-4" />
 														</Button>
@@ -570,7 +568,9 @@ export function DevicesSettings() {
 														type="button"
 														variant="ghost"
 														size="icon-sm"
-														aria-label={t('common:settings.devices.removeDevice')}
+														aria-label={t(
+															'common:settings.devices.removeDevice'
+														)}
 														onClick={async () => {
 															try {
 																await forget(device.endpoint_id)

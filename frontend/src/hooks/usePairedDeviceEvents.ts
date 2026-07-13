@@ -24,17 +24,23 @@ export function usePairedDeviceEvents(options: {
 		let unlistenIdentityRotated: (() => void) | undefined
 
 		const setup = async () => {
-			const presenceUnlisten = await listen('paired-device-presence', (event) => {
-				try {
-					const payload =
-						typeof event.payload === 'string'
-							? (JSON.parse(event.payload) as DevicePresencePayload)
-							: (event.payload as DevicePresencePayload)
-					onPresence(payload)
-				} catch (error) {
-					console.error('Failed to parse paired-device-presence event:', error)
+			const presenceUnlisten = await listen(
+				'paired-device-presence',
+				(event) => {
+					try {
+						const payload =
+							typeof event.payload === 'string'
+								? (JSON.parse(event.payload) as DevicePresencePayload)
+								: (event.payload as DevicePresencePayload)
+						onPresence(payload)
+					} catch (error) {
+						console.error(
+							'Failed to parse paired-device-presence event:',
+							error
+						)
+					}
 				}
-			})
+			)
 			if (disposed) {
 				presenceUnlisten()
 			} else {

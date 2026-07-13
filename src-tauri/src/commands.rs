@@ -1,12 +1,11 @@
 use crate::features::thumbnail::generate_thumbnail;
 use crate::state::{AppStateMutex, ShareHandle};
 use engine::{
-    download, fetch_metadata, get_relay_status as engine_get_relay_status,
-    pairing_dev, pairing_dev_warn, resolve_relay_mode_with_fallback,
-    start_share_items, verify_relays as engine_verify_relays, DeviceInfo, NodeService,
-    PairedDevice, PairedDeviceInfo, AddrInfoOptions, AppHandle, EventEmitter, FileMetadata,
-    FilePreviewItem,
-    ReceiveOptions, SendOptions,
+    download, fetch_metadata, get_relay_status as engine_get_relay_status, pairing_dev,
+    pairing_dev_warn, resolve_relay_mode_with_fallback, start_share_items,
+    verify_relays as engine_verify_relays, AddrInfoOptions, AppHandle, DeviceInfo, EventEmitter,
+    FileMetadata, FilePreviewItem, NodeService, PairedDevice, PairedDeviceInfo, ReceiveOptions,
+    SendOptions,
 };
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -707,7 +706,9 @@ fn node_status_from_state(guard: &crate::state::AppState) -> NodeStatusResponse 
 
 #[cfg(desktop)]
 #[tauri::command]
-pub async fn get_node_status(state: State<'_, AppStateMutex>) -> Result<NodeStatusResponse, String> {
+pub async fn get_node_status(
+    state: State<'_, AppStateMutex>,
+) -> Result<NodeStatusResponse, String> {
     let guard = state.lock().await;
     let status = node_status_from_state(&guard);
     pairing_dev!(
@@ -731,10 +732,7 @@ pub async fn reconfigure_node_relay(
     let node = {
         let guard = state.lock().await;
         if guard.current_share.is_some() || guard.is_share_starting {
-            pairing_dev_warn!(
-                "cmd.reconfigure_relay.blocked",
-                reason = "active_share"
-            );
+            pairing_dev_warn!("cmd.reconfigure_relay.blocked", reason = "active_share");
             return Err(
                 "Stop sharing before changing relay settings for paired devices.".to_string(),
             );
@@ -745,12 +743,10 @@ pub async fn reconfigure_node_relay(
             .ok_or_else(|| "Device pairing is not available on this device.".to_string())?
     };
 
-    node.reconfigure_relay(relay_mode)
-        .await
-        .map_err(|e| {
-            pairing_dev_warn!("cmd.reconfigure_relay.failed", error = %e);
-            format!("Failed to update device relay: {e}")
-        })?;
+    node.reconfigure_relay(relay_mode).await.map_err(|e| {
+        pairing_dev_warn!("cmd.reconfigure_relay.failed", error = %e);
+        format!("Failed to update device relay: {e}")
+    })?;
     pairing_dev!("cmd.reconfigure_relay.done");
     Ok(())
 }
@@ -759,15 +755,12 @@ pub async fn reconfigure_node_relay(
 #[tauri::command]
 pub async fn get_device_info(state: State<'_, AppStateMutex>) -> Result<DeviceInfo, String> {
     let guard = state.lock().await;
-    let node = guard
-        .node
-        .as_ref()
-        .ok_or_else(|| {
-            guard
-                .node_init_error
-                .clone()
-                .unwrap_or_else(|| "Device pairing is not available.".to_string())
-        })?;
+    let node = guard.node.as_ref().ok_or_else(|| {
+        guard
+            .node_init_error
+            .clone()
+            .unwrap_or_else(|| "Device pairing is not available.".to_string())
+    })?;
     let info = node.device_info();
     pairing_dev!(
         "cmd.get_device_info",
@@ -788,12 +781,10 @@ pub async fn set_device_display_name(
     pairing_dev!("cmd.set_device_display_name", display_name = %display_name);
     let guard = state.lock().await;
     let node = require_node(&guard)?;
-    let info = node
-        .set_device_display_name(&display_name)
-        .map_err(|e| {
-            pairing_dev_warn!("cmd.set_device_display_name.failed", error = %e);
-            e.to_string()
-        })?;
+    let info = node.set_device_display_name(&display_name).map_err(|e| {
+        pairing_dev_warn!("cmd.set_device_display_name.failed", error = %e);
+        e.to_string()
+    })?;
     pairing_dev!(
         "cmd.set_device_display_name.done",
         display_name = %info.display_name
@@ -848,17 +839,11 @@ pub async fn start_pairing_host(
     pairing_dev!("cmd.start_pairing_host", ttl_secs = ?ttl_secs);
     let guard = state.lock().await;
     let node = require_node(&guard)?;
-    let ticket = node
-        .start_pairing_host(ttl_secs)
-        .await
-        .map_err(|e| {
-            pairing_dev_warn!("cmd.start_pairing_host.failed", error = %e);
-            e.to_string()
-        })?;
-    pairing_dev!(
-        "cmd.start_pairing_host.done",
-        ticket_len = ticket.len()
-    );
+    let ticket = node.start_pairing_host(ttl_secs).await.map_err(|e| {
+        pairing_dev_warn!("cmd.start_pairing_host.failed", error = %e);
+        e.to_string()
+    })?;
+    pairing_dev!("cmd.start_pairing_host.done", ticket_len = ticket.len());
     Ok(ticket)
 }
 
@@ -876,19 +861,14 @@ pub async fn stop_pairing_host(state: State<'_, AppStateMutex>) -> Result<(), St
 
 #[cfg(desktop)]
 #[tauri::command]
-pub async fn join_pairing(
-    ticket: String,
-    state: State<'_, AppStateMutex>,
-) -> Result<(), String> {
+pub async fn join_pairing(ticket: String, state: State<'_, AppStateMutex>) -> Result<(), String> {
     pairing_dev!("cmd.join_pairing", ticket_len = ticket.len());
     let guard = state.lock().await;
     let node = require_node(&guard)?;
-    node.join_pairing(&ticket)
-        .await
-        .map_err(|e| {
-            pairing_dev_warn!("cmd.join_pairing.failed", error = %e);
-            e.to_string()
-        })?;
+    node.join_pairing(&ticket).await.map_err(|e| {
+        pairing_dev_warn!("cmd.join_pairing.failed", error = %e);
+        e.to_string()
+    })?;
     pairing_dev!("cmd.join_pairing.done");
     Ok(())
 }
@@ -902,10 +882,7 @@ pub async fn list_paired_devices(
     let guard = state.lock().await;
     let node = require_node(&guard)?;
     let devices = node.list_paired().map_err(|e| e.to_string())?;
-    pairing_dev!(
-        "cmd.list_paired_devices.done",
-        count = devices.len()
-    );
+    pairing_dev!("cmd.list_paired_devices.done", count = devices.len());
     Ok(devices)
 }
 
@@ -918,12 +895,10 @@ pub async fn forget_paired_device(
     pairing_dev!("cmd.forget_paired_device", endpoint_id = %endpoint_id);
     let guard = state.lock().await;
     let node = require_node(&guard)?;
-    node.forget_paired(&endpoint_id)
-        .await
-        .map_err(|e| {
-            pairing_dev_warn!("cmd.forget_paired_device.failed", error = %e);
-            e.to_string()
-        })?;
+    node.forget_paired(&endpoint_id).await.map_err(|e| {
+        pairing_dev_warn!("cmd.forget_paired_device.failed", error = %e);
+        e.to_string()
+    })?;
     pairing_dev!("cmd.forget_paired_device.done", endpoint_id = %endpoint_id);
     Ok(())
 }

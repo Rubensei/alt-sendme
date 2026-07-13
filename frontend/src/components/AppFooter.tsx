@@ -1,5 +1,11 @@
 import { buttonVariants } from './ui/button'
-import { CoffeeIcon, GithubIcon, GlobeIcon, MonitorSmartphone, SettingsIcon } from 'lucide-react'
+import {
+	CoffeeIcon,
+	GithubIcon,
+	GlobeIcon,
+	MonitorSmartphone,
+	SettingsIcon,
+} from 'lucide-react'
 import { useTranslation } from '@/i18n'
 import {
 	DONATE_LINK,

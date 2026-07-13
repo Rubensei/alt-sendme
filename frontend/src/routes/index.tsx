@@ -112,7 +112,11 @@ export function IndexPage() {
 							<TabsContent value="send">
 								<Sender onTransferStateChange={setIsSharing} />
 							</TabsContent>
-							<TabsContent forceMount value="receive" className="data-[state=inactive]:hidden">
+							<TabsContent
+								forceMount
+								value="receive"
+								className="data-[state=inactive]:hidden"
+							>
 								<Receiver onTransferStateChange={setIsReceiving} />
 							</TabsContent>
 						</FramePanel>

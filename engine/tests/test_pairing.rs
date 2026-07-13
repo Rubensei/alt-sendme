@@ -5,6 +5,10 @@ use iroh::SecretKey;
 use protocol::identity::{normalize_display_name, DeviceMetaFile};
 use protocol::{read_message, write_message};
 
+fn generated_endpoint_id() -> String {
+    data_encoding::HEXLOWER.encode(SecretKey::generate().public().as_bytes())
+}
+
 #[test]
 fn forget_control_message_roundtrip() {
     let msg = ControlMessage::Forget {
@@ -21,7 +25,6 @@ fn forget_control_message_roundtrip() {
 
 #[test]
 fn pairing_info_without_os_field_still_parses() {
-    // Older peers don't send `os`.
     let json = r#"{
         "type": "pairing-info",
         "endpoint_id": "aa",
@@ -31,7 +34,9 @@ fn pairing_info_without_os_field_still_parses() {
     }"#;
     let decoded: ControlMessage = serde_json::from_str(json).expect("deserialize");
     match decoded {
-        ControlMessage::PairingInfo { os, display_name, .. } => {
+        ControlMessage::PairingInfo {
+            os, display_name, ..
+        } => {
             assert_eq!(os, "");
             assert_eq!(display_name, "Old Peer");
         }
@@ -54,45 +59,48 @@ fn paired_device_defaults_to_active_pairing_status() {
     assert!(device.pairing_status.is_active());
 }
 
-#[test]
-fn stale_local_identity_devices_are_connectable_but_not_active() {
+fn assert_pairing_status_roundtrip(
+    status: PairingStatus,
+    active: bool,
+    connectable: bool,
+    wire_name: &str,
+) {
     let device = PairedDevice {
-        endpoint_id: "cc".to_string(),
-        display_name: "Stale".to_string(),
+        endpoint_id: "aa".to_string(),
+        display_name: "Device".to_string(),
         device_type: "desktop".to_string(),
         os: "linux".to_string(),
         paired_at: 1,
         last_seen_at: 2,
         relay_url: None,
-        pairing_status: PairingStatus::StaleLocalIdentity,
+        pairing_status: status,
     };
-    assert!(!device.pairing_status.is_active());
-    assert!(device.pairing_status.is_connectable());
+    assert_eq!(device.pairing_status.is_active(), active);
+    assert_eq!(device.pairing_status.is_connectable(), connectable);
     let json = serde_json::to_string(&device).expect("serialize");
-    assert!(json.contains("stale-local-identity"));
+    assert!(json.contains(wire_name));
     let round_tripped: PairedDevice = serde_json::from_str(&json).expect("deserialize");
     assert_eq!(round_tripped, device);
 }
 
 #[test]
+fn stale_local_identity_devices_are_connectable_but_not_active() {
+    assert_pairing_status_roundtrip(
+        PairingStatus::StaleLocalIdentity,
+        false,
+        true,
+        "stale-local-identity",
+    );
+}
+
+#[test]
 fn unpaired_remotely_devices_are_not_active_or_connectable() {
-    let device = PairedDevice {
-        endpoint_id: "bb".to_string(),
-        display_name: "Remote".to_string(),
-        device_type: "desktop".to_string(),
-        os: "linux".to_string(),
-        paired_at: 1,
-        last_seen_at: 2,
-        relay_url: None,
-        pairing_status: PairingStatus::UnpairedRemotely,
-    };
-    assert!(!device.pairing_status.is_active());
-    // Must drop out of presence loops and the allowlist.
-    assert!(!device.pairing_status.is_connectable());
-    let json = serde_json::to_string(&device).expect("serialize");
-    assert!(json.contains("unpaired-remotely"));
-    let round_tripped: PairedDevice = serde_json::from_str(&json).expect("deserialize");
-    assert_eq!(round_tripped, device);
+    assert_pairing_status_roundtrip(
+        PairingStatus::UnpairedRemotely,
+        false,
+        false,
+        "unpaired-remotely",
+    );
 }
 
 #[test]
@@ -100,7 +108,7 @@ fn pairing_ticket_roundtrip_json_with_relay() {
     let ticket = PairingTicket {
         v: 1,
         kind: PairingTicket::KIND.to_string(),
-        endpoint_id: "a".repeat(64),
+        endpoint_id: generated_endpoint_id(),
         relay_url: Some("https://relay.example.com".to_string()),
     };
     let encoded = ticket.encode().expect("encode");
@@ -113,7 +121,7 @@ fn pairing_ticket_roundtrip_json_with_relay() {
 
 #[test]
 fn pairing_ticket_encodes_bare_endpoint_id_without_relay() {
-    let endpoint_id = "a".repeat(64);
+    let endpoint_id = generated_endpoint_id();
     let ticket = PairingTicket {
         v: 1,
         kind: PairingTicket::KIND.to_string(),
@@ -131,7 +139,7 @@ fn pairing_ticket_encodes_bare_endpoint_id_without_relay() {
 
 #[test]
 fn pairing_ticket_encodes_bare_endpoint_id_for_public_relay() {
-    let endpoint_id = "a".repeat(64);
+    let endpoint_id = generated_endpoint_id();
     let ticket = PairingTicket {
         v: 1,
         kind: PairingTicket::KIND.to_string(),
@@ -155,7 +163,7 @@ fn pairing_ticket_encode_rejects_invalid_endpoint_id() {
 
 #[test]
 fn pairing_ticket_accepts_bare_endpoint_id() {
-    let endpoint_id = "b".repeat(64);
+    let endpoint_id = generated_endpoint_id();
     let decoded = PairingTicket::decode(&endpoint_id).expect("bare id decode");
     assert_eq!(decoded.endpoint_id, endpoint_id);
     assert!(decoded.relay_url.is_none());
@@ -163,7 +171,7 @@ fn pairing_ticket_accepts_bare_endpoint_id() {
 
 #[test]
 fn pairing_ticket_decode_trims_whitespace() {
-    let endpoint_id = "d".repeat(64);
+    let endpoint_id = generated_endpoint_id();
     let padded = format!("  {endpoint_id}\n");
     let decoded = PairingTicket::decode(&padded).expect("padded decode");
     assert_eq!(decoded.endpoint_id, endpoint_id);
@@ -171,7 +179,7 @@ fn pairing_ticket_decode_trims_whitespace() {
 
 #[test]
 fn pairing_ticket_accepts_legacy_json_with_v_and_null_relay() {
-    let endpoint_id = "c".repeat(64);
+    let endpoint_id = generated_endpoint_id();
     let legacy = format!(
         "{{\"v\":1,\"kind\":\"pair\",\"endpoint_id\":\"{}\",\"relay_url\":null}}",
         endpoint_id
@@ -184,21 +192,37 @@ fn pairing_ticket_accepts_legacy_json_with_v_and_null_relay() {
 #[test]
 fn pairing_ticket_decode_rejects_invalid_input() {
     // Wrong kind.
-    let wrong_kind = format!("{{\"kind\":\"share\",\"endpoint_id\":\"{}\"}}", "a".repeat(64));
+    let wrong_kind = format!(
+        "{{\"kind\":\"share\",\"endpoint_id\":\"{}\"}}",
+        "a".repeat(64)
+    );
     assert!(PairingTicket::decode(&wrong_kind).is_err());
     // Bare id too short / not hex.
     assert!(PairingTicket::decode(&"a".repeat(63)).is_err());
     assert!(PairingTicket::decode(&"g".repeat(64)).is_err());
-    // Arbitrary garbage.
     assert!(PairingTicket::decode("").is_err());
     assert!(PairingTicket::decode("hello world").is_err());
 }
 
 #[test]
 fn pairing_ticket_decode_rejects_json_with_invalid_endpoint_id() {
-    // Bad ids should fail here, not deep inside the join flow.
     let garbage_id = "{\"kind\":\"pair\",\"endpoint_id\":\"garbage\"}";
     assert!(PairingTicket::decode(garbage_id).is_err());
+    // 64 hex chars that are not a valid ed25519 point.
+    let not_a_point = format!("02{}", "0".repeat(62));
+    let json = format!("{{\"kind\":\"pair\",\"endpoint_id\":\"{not_a_point}\"}}");
+    assert!(PairingTicket::decode(&json).is_err());
+    assert!(PairingTicket::decode(&not_a_point).is_err());
+}
+
+#[test]
+fn pairing_ticket_accepts_json_with_base32_endpoint_id() {
+    // Endpoint ids also have a base32 form.
+    let secret = SecretKey::generate();
+    let b32 = data_encoding::BASE32_NOPAD.encode(secret.public().as_bytes());
+    let json = format!("{{\"kind\":\"pair\",\"endpoint_id\":\"{b32}\"}}");
+    let decoded = PairingTicket::decode(&json).expect("base32 decode");
+    assert_eq!(decoded.endpoint_id, b32);
 }
 
 #[test]
@@ -219,17 +243,19 @@ fn pairing_auth_rejects_forged_or_malformed_signatures() {
     let keying = [0xA5u8; 32];
     let signature = sign_challenge(&secret, &keying);
 
-    // A different key must not be able to impersonate the endpoint.
     let attacker = SecretKey::generate();
     let forged = sign_challenge(&attacker, &keying);
     assert!(!verify_challenge(&endpoint_id, &keying, &forged));
 
-    // Malformed encodings are rejected, not panics.
     assert!(!verify_challenge(&endpoint_id, &keying, "not hex"));
     assert!(!verify_challenge(&endpoint_id, &keying, &"ab".repeat(32)));
     assert!(!verify_challenge(&endpoint_id, &keying, ""));
     // Signatures are exchanged as lowercase hex.
-    assert!(!verify_challenge(&endpoint_id, &keying, &signature.to_uppercase()));
+    assert!(!verify_challenge(
+        &endpoint_id,
+        &keying,
+        &signature.to_uppercase()
+    ));
 }
 
 #[tokio::test]
@@ -336,7 +362,8 @@ fn relay_and_addresses_preserves_relay_and_ip_addrs() {
     let relay_url = RelayUrl::from_str("https://relay.example.com").unwrap();
     let mut addr = EndpointAddr::from(endpoint_id);
     addr.addrs.insert(TransportAddr::Relay(relay_url.clone()));
-    addr.addrs.insert(TransportAddr::Ip("127.0.0.1:8080".parse().unwrap()));
+    addr.addrs
+        .insert(TransportAddr::Ip("127.0.0.1:8080".parse().unwrap()));
 
     let before = addr.addrs.len();
     apply_options(&mut addr, AddrInfoOptions::RelayAndAddresses);

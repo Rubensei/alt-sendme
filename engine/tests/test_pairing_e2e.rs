@@ -3,7 +3,8 @@ mod common;
 use std::path::Path;
 use std::time::Duration;
 
-use common::MockEventEmitter;
+use common::{wait_until, MockEventEmitter};
+use engine::identity_store::identity_key_path;
 use engine::{NodeService, PairingStatus};
 use iroh::endpoint::RelayMode;
 use iroh::SecretKey;
@@ -12,12 +13,11 @@ const START_TIMEOUT: Duration = Duration::from_secs(60);
 const JOIN_DEADLINE: Duration = Duration::from_secs(90);
 const SETTLE_DEADLINE: Duration = Duration::from_secs(30);
 
-/// Pre-seed a distinct `identity.key`. The mock keychain is process-global,
-/// so without this the second node would inherit the first node's secret.
+/// Pre-seed `identity.key` so each node's endpoint id is known up front.
 fn seed_identity(data_dir: &Path) -> String {
     std::fs::create_dir_all(data_dir).expect("create data dir");
     let secret = SecretKey::generate();
-    std::fs::write(data_dir.join("identity.key"), secret.to_bytes()).expect("write identity.key");
+    std::fs::write(identity_key_path(data_dir), secret.to_bytes()).expect("write identity.key");
     data_encoding::HEXLOWER.encode(secret.public().as_bytes())
 }
 
@@ -29,17 +29,6 @@ async fn start_node(data_dir: &Path, emitter: std::sync::Arc<MockEventEmitter>) 
     .await
     .expect("node start timed out")
     .expect("node start failed")
-}
-
-async fn wait_until(what: &str, deadline: Duration, check: impl Fn() -> bool) {
-    let end = tokio::time::Instant::now() + deadline;
-    while !check() {
-        assert!(
-            tokio::time::Instant::now() < end,
-            "timed out waiting for {what}"
-        );
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    }
 }
 
 fn paired_status(node: &NodeService, endpoint_id: &str) -> Option<PairingStatus> {
@@ -56,6 +45,10 @@ async fn e2e_pairing_lifecycle() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter("pairing-dev=info")
         .try_init();
+    assert!(
+        std::env::var_os("IROH_SECRET").is_none(),
+        "IROH_SECRET overrides the seeded per-node identities; unset it first"
+    );
     let host_dir = tempfile::tempdir().expect("host dir");
     let joiner_dir = tempfile::tempdir().expect("joiner dir");
     let host_id = seed_identity(host_dir.path());
@@ -64,8 +57,10 @@ async fn e2e_pairing_lifecycle() {
 
     let host_events = MockEventEmitter::new();
     let joiner_events = MockEventEmitter::new();
-    let host = start_node(host_dir.path(), host_events.clone()).await;
-    let joiner = start_node(joiner_dir.path(), joiner_events.clone()).await;
+    let (host, joiner) = tokio::join!(
+        start_node(host_dir.path(), host_events.clone()),
+        start_node(joiner_dir.path(), joiner_events.clone())
+    );
     assert_eq!(host.device_info().endpoint_id, host_id);
 
     // --- Pair while the host window is open ---
@@ -77,17 +72,24 @@ async fn e2e_pairing_lifecycle() {
     // Address discovery may lag right after the endpoints come online.
     let end = tokio::time::Instant::now() + JOIN_DEADLINE;
     loop {
-        match joiner.join_pairing(&ticket).await {
-            Ok(()) => break,
-            Err(err) => {
+        match tokio::time::timeout(Duration::from_secs(30), joiner.join_pairing(&ticket)).await {
+            Ok(Ok(())) => break,
+            Ok(Err(err)) => {
                 assert!(
                     tokio::time::Instant::now() < end,
                     "join_pairing did not succeed within {JOIN_DEADLINE:?}: {err:#}"
                 );
                 eprintln!("join attempt failed, retrying: {err:#}");
-                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            Err(_) => {
+                assert!(
+                    tokio::time::Instant::now() < end,
+                    "join_pairing did not succeed within {JOIN_DEADLINE:?}: last attempt hung"
+                );
+                eprintln!("join attempt timed out, retrying");
             }
         }
+        tokio::time::sleep(Duration::from_secs(2)).await;
     }
 
     assert_eq!(
@@ -98,9 +100,11 @@ async fn e2e_pairing_lifecycle() {
     assert!(joiner_events.has_event("device-paired"));
 
     // The host finishes its side of the handshake asynchronously.
-    wait_until("host to store the joiner as paired", SETTLE_DEADLINE, || {
-        paired_status(&host, &joiner_id) == Some(PairingStatus::Active)
-    })
+    wait_until(
+        "host to store the joiner as paired",
+        SETTLE_DEADLINE,
+        || paired_status(&host, &joiner_id) == Some(PairingStatus::Active),
+    )
     .await;
     wait_until("host device-paired event", SETTLE_DEADLINE, || {
         host_events.has_event("device-paired")
@@ -144,7 +148,9 @@ async fn e2e_pairing_lifecycle() {
     })
     .await;
 
-    stranger.shutdown().await.expect("shutdown stranger");
-    joiner.shutdown().await.expect("shutdown joiner");
-    host.shutdown().await.expect("shutdown host");
+    let (stranger_down, joiner_down, host_down) =
+        tokio::join!(stranger.shutdown(), joiner.shutdown(), host.shutdown());
+    stranger_down.expect("shutdown stranger");
+    joiner_down.expect("shutdown joiner");
+    host_down.expect("shutdown host");
 }
