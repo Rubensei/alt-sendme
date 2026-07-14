@@ -1,12 +1,12 @@
 import { useCallback, useEffect } from 'react'
 import { listen } from '@/lib/platform-api'
-import { IS_DESKTOP } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE } from '@/lib/platform'
 import { useNodeCapabilityStore } from '@/store/node-capability-store'
 
 let devicePairedListenerStarted = false
 
 function ensureDevicePairedListener() {
-	if (!IS_DESKTOP || devicePairedListenerStarted) return
+	if (!IS_PAIRING_CAPABLE || devicePairedListenerStarted) return
 	devicePairedListenerStarted = true
 	void listen('device-paired', () => {
 		void useNodeCapabilityStore.getState().refresh()
@@ -25,8 +25,8 @@ export function useNodeCapability() {
 
 	const refreshNodeStatus = useCallback(() => refresh(), [refresh])
 
-	const isNodeReady = IS_DESKTOP && nodeStatus.status === 'ready'
-	const isNodeStatusPending = IS_DESKTOP && !hasResolved
+	const isNodeReady = IS_PAIRING_CAPABLE && nodeStatus.status === 'ready'
+	const isNodeStatusPending = IS_PAIRING_CAPABLE && !hasResolved
 
 	return {
 		nodeStatus,

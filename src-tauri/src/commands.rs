@@ -296,7 +296,7 @@ pub async fn stop_sharing(state: State<'_, AppStateMutex>) -> Result<(), String>
         std::fs::remove_dir_all(&share._path);
     }
 
-    #[cfg(desktop)]
+    #[cfg(any(desktop, target_os = "android"))]
     if let Some(node) = app_state.node.as_ref() {
         node.stop_pairing_host().await;
     }
@@ -601,7 +601,7 @@ pub async fn verify_relays(relay: RelayConfigArg) -> Result<VerifyRelaysResponse
     engine_verify_relays(relay).await
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 pub async fn init_node_service(app_handle: tauri::AppHandle) -> Result<(), String> {
 
     let data_dir = app_handle
@@ -636,7 +636,7 @@ pub struct NodeStatusResponse {
     pub reason: Option<String>,
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 fn node_status_from_state(guard: &crate::state::AppState) -> NodeStatusResponse {
     if guard.node.is_some() {
         return NodeStatusResponse {
@@ -650,7 +650,7 @@ fn node_status_from_state(guard: &crate::state::AppState) -> NodeStatusResponse 
     }
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn get_node_status(
     state: State<'_, AppStateMutex>,
@@ -661,7 +661,7 @@ pub async fn get_node_status(
     Ok(status)
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn reconfigure_node_relay(
     relay: Option<RelayConfigArg>,
@@ -693,7 +693,7 @@ pub async fn reconfigure_node_relay(
     Ok(())
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn get_device_info(state: State<'_, AppStateMutex>) -> Result<DeviceInfo, String> {
     let guard = state.lock().await;
@@ -708,7 +708,7 @@ pub async fn get_device_info(state: State<'_, AppStateMutex>) -> Result<DeviceIn
     Ok(info)
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn set_device_display_name(
     display_name: String,
@@ -725,7 +725,7 @@ pub async fn set_device_display_name(
     Ok(info)
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn rename_paired_device(
     endpoint_id: String,
@@ -745,7 +745,7 @@ pub async fn rename_paired_device(
     Ok(device)
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 fn require_node(guard: &crate::state::AppState) -> Result<&NodeService, String> {
     guard.node.as_deref().ok_or_else(|| {
         guard
@@ -755,7 +755,7 @@ fn require_node(guard: &crate::state::AppState) -> Result<&NodeService, String> 
     })
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 fn require_node_arc(guard: &crate::state::AppState) -> Result<Arc<NodeService>, String> {
     guard.node.clone().ok_or_else(|| {
         guard
@@ -765,7 +765,7 @@ fn require_node_arc(guard: &crate::state::AppState) -> Result<Arc<NodeService>, 
     })
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn get_pairing_ticket(state: State<'_, AppStateMutex>) -> Result<String, String> {
     let node = {
@@ -775,7 +775,7 @@ pub async fn get_pairing_ticket(state: State<'_, AppStateMutex>) -> Result<Strin
     node.pairing_ticket().map_err(|e| e.to_string())
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn start_pairing_host(
     ttl_secs: Option<u64>,
@@ -793,7 +793,7 @@ pub async fn start_pairing_host(
     Ok(ticket)
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn stop_pairing_host(state: State<'_, AppStateMutex>) -> Result<(), String> {
     let node = {
@@ -807,7 +807,7 @@ pub async fn stop_pairing_host(state: State<'_, AppStateMutex>) -> Result<(), St
     Ok(())
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn join_pairing(ticket: String, state: State<'_, AppStateMutex>) -> Result<(), String> {
     let node = {
@@ -821,7 +821,7 @@ pub async fn join_pairing(ticket: String, state: State<'_, AppStateMutex>) -> Re
     Ok(())
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn list_paired_devices(
     state: State<'_, AppStateMutex>,
@@ -835,7 +835,7 @@ pub async fn list_paired_devices(
     Ok(devices)
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn forget_paired_device(
     endpoint_id: String,
@@ -857,7 +857,7 @@ pub struct InviteDelivered {
     pub delivered: bool,
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn invite_paired_device(
     endpoint_id: String,
@@ -878,7 +878,7 @@ pub async fn invite_paired_device(
     Ok(InviteDelivered { delivered })
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 #[tauri::command]
 pub async fn respond_paired_invite(
     endpoint_id: String,

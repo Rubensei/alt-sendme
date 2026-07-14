@@ -312,7 +312,7 @@
 			"codePlaceholder": "貼上配對碼",
 			"copied": "配對碼已複製",
 			"description": "配對裝置一次，即可無需複製票券傳送檔案。",
-			"desktopOnly": "裝置配對僅在桌面應用程式中可用。",
+			"desktopOnly": "裝置配對可在桌面與 Android 應用程式中使用。",
 			"deviceName": "裝置名稱",
 			"deviceNamePlaceholder": "例如：Tony 的 MacBook",
 			"devicePaired": "裝置已配對",

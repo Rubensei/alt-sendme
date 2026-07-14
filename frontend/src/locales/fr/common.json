@@ -312,7 +312,7 @@
 			"codePlaceholder": "Coller le code d’association",
 			"copied": "Code d’association copié",
 			"description": "Associez vos appareils une fois, puis envoyez des fichiers sans copier de tickets.",
-			"desktopOnly": "L’association d’appareils est disponible uniquement dans l’application de bureau.",
+			"desktopOnly": "L’association d’appareils est disponible dans les applications bureau et Android.",
 			"deviceName": "Nom de l’appareil",
 			"deviceNamePlaceholder": "p. ex. MacBook de Tony",
 			"devicePaired": "Appareil associé",

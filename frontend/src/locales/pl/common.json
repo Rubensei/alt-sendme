@@ -312,7 +312,7 @@
 			"codePlaceholder": "Wklej kod parowania",
 			"copied": "Kod parowania skopiowany",
 			"description": "Sparuj urządzenia raz, a potem wysyłaj pliki bez kopiowania biletów.",
-			"desktopOnly": "Parowanie urządzeń jest dostępne tylko w aplikacji desktopowej.",
+			"desktopOnly": "Parowanie urządzeń jest dostępne w aplikacji desktopowej i Android.",
 			"deviceName": "Nazwa urządzenia",
 			"deviceNamePlaceholder": "np. MacBook Tony’ego",
 			"devicePaired": "Urządzenie sparowane",

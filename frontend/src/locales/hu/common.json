@@ -312,7 +312,7 @@
 			"codePlaceholder": "Illeszd be a párosítási kódot",
 			"copied": "Párosítási kód másolva",
 			"description": "Párosítsd az eszközeidet egyszer, majd küldj fájlokat jegyek másolása nélkül.",
-			"desktopOnly": "Az eszközpárosítás csak az asztali alkalmazásban érhető el.",
+			"desktopOnly": "Az eszközpárosítás az asztali és az Android alkalmazásban érhető el.",
 			"deviceName": "Eszköz neve",
 			"deviceNamePlaceholder": "pl. Tony MacBookja",
 			"devicePaired": "Eszköz párosítva",

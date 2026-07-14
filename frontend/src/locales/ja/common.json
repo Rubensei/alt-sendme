@@ -312,7 +312,7 @@
 			"codePlaceholder": "ペアリングコードを貼り付け",
 			"copied": "ペアリングコードをコピーしました",
 			"description": "デバイスを一度ペアリングすれば、チケットをコピーせずにファイルを送信できます。",
-			"desktopOnly": "デバイスのペアリングはデスクトップアプリでのみ利用できます。",
+			"desktopOnly": "デバイスのペアリングはデスクトップおよび Android アプリで利用できます。",
 			"deviceName": "デバイス名",
 			"deviceNamePlaceholder": "例：Tony の MacBook",
 			"devicePaired": "デバイスをペアリングしました",

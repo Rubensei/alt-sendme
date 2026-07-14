@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@/lib/platform-api'
-import { IS_DESKTOP } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE } from '@/lib/platform'
 import {
 	forgetPairedDevice,
 	joinPairing,
@@ -60,7 +60,7 @@ export function usePairing() {
 	}, [hasResolved, isNodeReady, hydrate])
 
 	useEffect(() => {
-		if (!IS_DESKTOP) return
+		if (!IS_PAIRING_CAPABLE) return
 
 		let disposed = false
 		let unlistenPaired: (() => void) | undefined
@@ -149,7 +149,7 @@ export function usePairing() {
 	}, [hostExpiresIn])
 
 	const openHostPairing = useCallback(async () => {
-		if (!IS_DESKTOP || !isNodeReady) return null
+		if (!IS_PAIRING_CAPABLE || !isNodeReady) return null
 		setIsLoading(true)
 		try {
 			const ticket = await startPairingHost({ ttlSecs: PAIRING_HOST_TTL_SECS })
@@ -175,7 +175,7 @@ export function usePairing() {
 
 	const join = useCallback(
 		async (ticket: string) => {
-			if (!IS_DESKTOP || !isNodeReady) return
+			if (!IS_PAIRING_CAPABLE || !isNodeReady) return
 			setIsJoining(true)
 			try {
 				await joinPairing(ticket.trim())
@@ -214,7 +214,7 @@ export function usePairing() {
 	)
 
 	const isPairingDataPending =
-		IS_DESKTOP && (isNodeStatusPending || (isNodeReady && !hasHydrated))
+		IS_PAIRING_CAPABLE && (isNodeStatusPending || (isNodeReady && !hasHydrated))
 
 	return {
 		devices,

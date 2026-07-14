@@ -312,7 +312,7 @@
 			"codePlaceholder": "Lim inn sammenkoblingskode",
 			"copied": "Sammenkoblingskode kopiert",
 			"description": "Koble sammen enhetene dine én gang, og send filer uten å kopiere nøkler.",
-			"desktopOnly": "Enhetssammenkobling er bare tilgjengelig i skrivebordsappen.",
+			"desktopOnly": "Enhetssammenkobling er tilgjengelig i skrivebords- og Android-appen.",
 			"deviceName": "Enhetsnavn",
 			"deviceNamePlaceholder": "f.eks. Tonys MacBook",
 			"devicePaired": "Enhet sammenkoblet",

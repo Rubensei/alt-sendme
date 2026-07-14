@@ -312,7 +312,7 @@
 			"codePlaceholder": "Colar código de pareamento",
 			"copied": "Código de pareamento copiado",
 			"description": "Pareie seus dispositivos uma vez e envie arquivos sem copiar tickets.",
-			"desktopOnly": "O pareamento de dispositivos está disponível apenas no app desktop.",
+			"desktopOnly": "O pareamento de dispositivos está disponível nos apps desktop e Android.",
 			"deviceName": "Nome do dispositivo",
 			"deviceNamePlaceholder": "ex.: MacBook do Tony",
 			"devicePaired": "Dispositivo pareado",

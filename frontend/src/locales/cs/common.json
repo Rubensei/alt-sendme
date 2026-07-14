@@ -312,7 +312,7 @@
 			"codePlaceholder": "Vložte párovací kód",
 			"copied": "Párovací kód zkopírován",
 			"description": "Spárujte zařízení jednou a pak posílejte soubory bez kopírování ticketů.",
-			"desktopOnly": "Párování zařízení je dostupné pouze v desktopové aplikaci.",
+			"desktopOnly": "Párování zařízení je dostupné v desktopové a Android aplikaci.",
 			"deviceName": "Název zařízení",
 			"deviceNamePlaceholder": "např. Tonyho MacBook",
 			"devicePaired": "Zařízení spárováno",

@@ -312,7 +312,7 @@
 			"codePlaceholder": "Juftlash kodini qo'ying",
 			"copied": "Juftlash kodi nusxalandi",
 			"description": "Qurilmalaringizni bir marta juftlang, keyin ticketlarni nusxalamasdan fayl yuboring.",
-			"desktopOnly": "Qurilma juftlash faqat desktop ilovasida mavjud.",
+			"desktopOnly": "Qurilma juftlash desktop va Android ilovalarida mavjud.",
 			"deviceName": "Qurilma nomi",
 			"deviceNamePlaceholder": "masalan, Tony'ning MacBook'i",
 			"devicePaired": "Qurilma juftlandi",

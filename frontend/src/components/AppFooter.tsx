@@ -16,7 +16,7 @@ import {
 import { Separator } from './ui/separator'
 import { Link } from 'react-router-dom'
 import { handleExternalLinkClick } from '@/lib/openExternalUrl'
-import { IS_DESKTOP } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { useSenderStore } from '@/store/sender-store'
 import { RelayStatusButton } from './RelayStatusButton'
@@ -85,7 +85,7 @@ export function AppFooter() {
 				))}
 			</div>
 			<div className="flex flex-1 items-center justify-end gap-2">
-				{IS_DESKTOP ? (
+				{IS_PAIRING_CAPABLE ? (
 					isSharing ? (
 						<span
 							aria-disabled

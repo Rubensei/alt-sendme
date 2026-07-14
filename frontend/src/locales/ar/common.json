@@ -312,7 +312,7 @@
 			"codePlaceholder": "الصق رمز الاقتران",
 			"copied": "تم نسخ رمز الاقتران",
 			"description": "اقترن أجهزتك مرة واحدة، ثم أرسل الملفات دون نسخ التذاكر.",
-			"desktopOnly": "اقتران الأجهزة متاح في تطبيق سطح المكتب فقط.",
+			"desktopOnly": "اقتران الأجهزة متاح في تطبيقات سطح المكتب وAndroid.",
 			"deviceName": "اسم الجهاز",
 			"deviceNamePlaceholder": "مثال: MacBook الخاص بـ Tony",
 			"devicePaired": "تم اقتران الجهاز",

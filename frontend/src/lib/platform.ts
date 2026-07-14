@@ -26,3 +26,5 @@ export const IS_WINDOWS = IS_TAURI && platform.includes('windows')
 export const IS_LINUX = IS_TAURI && platform.includes('linux')
 export const IS_DESKTOP =
 	IS_TAURI && !IS_ANDROID && (IS_MACOS || IS_WINDOWS || IS_LINUX)
+/** Persistent pairing node (host/join/invite) — desktop apps and Android. */
+export const IS_PAIRING_CAPABLE = IS_DESKTOP || IS_ANDROID

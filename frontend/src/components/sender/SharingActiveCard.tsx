@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from '../../i18n/react-i18next-compat'
 import type { SharingControlsProps } from '../../types/sender'
-import { IS_DESKTOP } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE } from '@/lib/platform'
 import {
 	Sheet,
 	SheetContent,
@@ -49,11 +49,11 @@ export function SharingActiveCard({
 				onCopyTicket={onCopyTicket}
 				onSetBroadcast={onSetBroadcast}
 				onStopSharing={onStopSharing}
-				showPairedDevicesOption={IS_DESKTOP}
+				showPairedDevicesOption={IS_PAIRING_CAPABLE}
 				onOpenPairedDevices={() => setDevicesOpen(true)}
 			/>
 
-			{IS_DESKTOP ? (
+			{IS_PAIRING_CAPABLE ? (
 				<Sheet open={devicesOpen} onOpenChange={setDevicesOpen}>
 					<SheetContent side="right" inset className="sm:max-w-sm">
 						<SheetHeader>

@@ -312,7 +312,7 @@
 			"codePlaceholder": "জোড়ার কোড পেস্ট করুন",
 			"copied": "জোড়ার কোড কপি হয়েছে",
 			"description": "একবার ডিভাইস জোড়া দিন, তারপর টিকিট কপি না করে ফাইল পাঠান।",
-			"desktopOnly": "ডিভাইস জোড়া শুধু ডেস্কটপ অ্যাপে উপলব্ধ।",
+			"desktopOnly": "ডিভাইস জোড়া ডেস্কটপ ও Android অ্যাপে উপলব্ধ।",
 			"deviceName": "ডিভাইসের নাম",
 			"deviceNamePlaceholder": "যেমন Tony-এর MacBook",
 			"devicePaired": "ডিভাইস জোড়া হয়েছে",

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { IS_DESKTOP } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE } from '@/lib/platform'
 import {
 	getDeviceInfo,
 	getPairingTicket,
@@ -14,7 +14,7 @@ type PairingDataState = {
 	thisDevice: DeviceInfo | null
 	/** Stable pairing code for this device (valid across restarts). */
 	pairingCode: string | null
-	/** True after the first hydrate attempt when the node is ready (or not desktop). */
+	/** True after the first hydrate attempt when the node is ready (or pairing is unavailable). */
 	hasHydrated: boolean
 	setDevices: (
 		devices: PairedDevice[] | ((prev: PairedDevice[]) => PairedDevice[])
@@ -27,7 +27,7 @@ export const usePairingDataStore = create<PairingDataState>((set) => ({
 	devices: [],
 	thisDevice: null,
 	pairingCode: null,
-	hasHydrated: !IS_DESKTOP,
+	hasHydrated: !IS_PAIRING_CAPABLE,
 	setDevices: (devices) =>
 		set((state) => ({
 			devices:
@@ -35,7 +35,7 @@ export const usePairingDataStore = create<PairingDataState>((set) => ({
 		})),
 	setThisDevice: (thisDevice) => set({ thisDevice }),
 	hydrate: async () => {
-		if (!IS_DESKTOP) {
+		if (!IS_PAIRING_CAPABLE) {
 			set({
 				devices: [],
 				thisDevice: null,
@@ -82,7 +82,7 @@ export const usePairingDataStore = create<PairingDataState>((set) => ({
 
 /** Kick off node status + pairing preload without needing a mounted consumer. */
 export async function preloadPairingData() {
-	if (!IS_DESKTOP) return
+	if (!IS_PAIRING_CAPABLE) return
 	await useNodeCapabilityStore.getState().refresh()
 	await usePairingDataStore.getState().hydrate()
 }

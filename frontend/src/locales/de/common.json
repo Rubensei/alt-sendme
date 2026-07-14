@@ -312,7 +312,7 @@
 			"codePlaceholder": "Kopplungscode einfügen",
 			"copied": "Kopplungscode kopiert",
 			"description": "Koppeln Sie Ihre Geräte einmalig und senden Sie Dateien ohne Tickets zu kopieren.",
-			"desktopOnly": "Gerätekopplung ist nur in der Desktop-App verfügbar.",
+			"desktopOnly": "Gerätekopplung ist in der Desktop- und Android-App verfügbar.",
 			"deviceName": "Gerätename",
 			"deviceNamePlaceholder": "z. B. Tonys MacBook",
 			"devicePaired": "Gerät gekoppelt",

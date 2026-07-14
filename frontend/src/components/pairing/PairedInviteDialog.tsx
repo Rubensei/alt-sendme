@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from '@/i18n'
-import { IS_DESKTOP, IS_WEB } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE, IS_WEB } from '@/lib/platform'
 import { formatReceiveSavePath } from '@/lib/receive-save-path'
 import { supportsWebSaveLocationPicker } from '@/lib/platform-api'
 import { formatFileSize } from '@/lib/utils'
@@ -80,7 +80,7 @@ export function PairedInviteDialog() {
 		await browseSaveFolder()
 	}
 
-	if (!IS_DESKTOP) return null
+	if (!IS_PAIRING_CAPABLE) return null
 
 	const canPickSaveLocation = IS_WEB ? supportsWebSaveLocationPicker() : true
 	const savePathDisplay = formatReceiveSavePath(savePath)

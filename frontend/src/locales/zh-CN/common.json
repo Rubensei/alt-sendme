@@ -312,7 +312,7 @@
 			"codePlaceholder": "粘贴配对码",
 			"copied": "配对码已复制",
 			"description": "配对设备一次，即可无需复制票据发送文件。",
-			"desktopOnly": "设备配对仅在桌面应用中可用。",
+			"desktopOnly": "设备配对可在桌面和 Android 应用中使用。",
 			"deviceName": "设备名称",
 			"deviceNamePlaceholder": "例如：Tony 的 MacBook",
 			"devicePaired": "设备已配对",

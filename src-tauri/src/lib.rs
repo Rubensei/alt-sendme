@@ -93,36 +93,36 @@ pub fn run() {
             verify_relays,
             get_relay_status,
             toggle_context_menu,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             get_node_status,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             reconfigure_node_relay,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             get_device_info,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             set_device_display_name,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             get_pairing_ticket,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             start_pairing_host,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             stop_pairing_host,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             join_pairing,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             list_paired_devices,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             forget_paired_device,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             rename_paired_device,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             invite_paired_device,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             respond_paired_invite,
         ])
         .setup(|app| {
             setup_common(app);
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             {
                 let handle = app.handle().clone();
                 tauri::async_runtime::block_on(async move {
@@ -168,7 +168,7 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|app, event| {
             if matches!(event, RunEvent::Exit) {
-                #[cfg(desktop)]
+                #[cfg(any(desktop, target_os = "android"))]
                 {
                     let state = app.state::<state::AppStateMutex>();
                     tauri::async_runtime::block_on(async move {

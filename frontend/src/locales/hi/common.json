@@ -312,7 +312,7 @@
 			"codePlaceholder": "जोड़ने का कोड पेस्ट करें",
 			"copied": "जोड़ने का कोड कॉपी हुआ",
 			"description": "अपने उपकरण एक बार जोड़ें, फिर टिकट कॉपी किए बिना फ़ाइलें भेजें।",
-			"desktopOnly": "उपकरण जोड़ना केवल डेस्कटॉप ऐप में उपलब्ध है।",
+			"desktopOnly": "उपकरण जोड़ना डेस्कटॉप और Android ऐप में उपलब्ध है।",
 			"deviceName": "उपकरण का नाम",
 			"deviceNamePlaceholder": "उदा. Tony का MacBook",
 			"devicePaired": "उपकरण जोड़ा गया",

@@ -6,7 +6,7 @@ import { buildRelayConfigArg } from '../../../lib/relay-config'
 import { reconfigureNodeRelay } from '../../../lib/pairing-api'
 import { useAppSettingStore } from '../../../store/app-setting'
 import { useNodeCapability } from '../../../hooks/useNodeCapability'
-import { IS_DESKTOP } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE } from '@/lib/platform'
 import {
 	AlertDialog,
 	AlertDialogContent,
@@ -66,7 +66,7 @@ export function RelayChangeGuard() {
 	const confirmLeave = () => {
 		if (blocker.state === 'blocked') {
 			blocker.proceed()
-			if (IS_DESKTOP && isNodeReady) {
+			if (IS_PAIRING_CAPABLE && isNodeReady) {
 				void reconfigureNodeRelay(
 					buildRelayConfigArg({
 						relayMode,
@@ -99,7 +99,7 @@ export function RelayChangeGuard() {
 						{warningType === 'disabled'
 							? t('settings.network.relay.confirmDisableDescription')
 							: t('settings.network.relay.confirmCustomDescriptionWithPolicy')}
-						{IS_DESKTOP && isNodeReady ? (
+						{IS_PAIRING_CAPABLE && isNodeReady ? (
 							<>
 								<br />
 								<br />

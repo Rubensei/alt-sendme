@@ -1,5 +1,5 @@
 import { invoke } from './platform-api'
-import { IS_DESKTOP } from './platform'
+import { IS_PAIRING_CAPABLE } from './platform'
 import type { RelayConfigArg } from './relay-config'
 
 export interface DeviceInfo {
@@ -62,12 +62,12 @@ export interface NodeStatus {
 	reason?: string | null
 }
 
-function desktopOnly(): boolean {
-	return IS_DESKTOP
+function pairingCapable(): boolean {
+	return IS_PAIRING_CAPABLE
 }
 
 export async function getNodeStatus(): Promise<NodeStatus> {
-	if (!desktopOnly()) {
+	if (!pairingCapable()) {
 		return { status: 'unavailable', reason: 'desktop_only' }
 	}
 	return invoke<NodeStatus>('get_node_status')
@@ -76,58 +76,58 @@ export async function getNodeStatus(): Promise<NodeStatus> {
 export async function reconfigureNodeRelay(
 	relay: RelayConfigArg
 ): Promise<void> {
-	if (!desktopOnly()) return
+	if (!pairingCapable()) return
 	await invoke('reconfigure_node_relay', { relay })
 }
 
 export async function getDeviceInfo(): Promise<DeviceInfo | null> {
-	if (!desktopOnly()) return null
+	if (!pairingCapable()) return null
 	return invoke<DeviceInfo>('get_device_info')
 }
 
 export async function setDeviceDisplayName(
 	displayName: string
 ): Promise<DeviceInfo | null> {
-	if (!desktopOnly()) return null
+	if (!pairingCapable()) return null
 	return invoke<DeviceInfo>('set_device_display_name', {
 		displayName,
 	})
 }
 
 export async function getPairingTicket(): Promise<string | null> {
-	if (!desktopOnly()) return null
+	if (!pairingCapable()) return null
 	return invoke<string>('get_pairing_ticket')
 }
 
 export async function startPairingHost(options?: {
 	ttlSecs?: number | null
 }): Promise<string> {
-	if (!desktopOnly()) {
-		throw new Error('Device pairing is only available on desktop')
+	if (!pairingCapable()) {
+		throw new Error('Device pairing is not available on this platform')
 	}
 	const ttlSecs = options?.ttlSecs ?? null
 	return invoke<string>('start_pairing_host', { ttlSecs })
 }
 
 export async function stopPairingHost(): Promise<void> {
-	if (!desktopOnly()) return
+	if (!pairingCapable()) return
 	await invoke('stop_pairing_host')
 }
 
 export async function joinPairing(ticket: string): Promise<void> {
-	if (!desktopOnly()) {
-		throw new Error('Device pairing is only available on desktop')
+	if (!pairingCapable()) {
+		throw new Error('Device pairing is not available on this platform')
 	}
 	await invoke('join_pairing', { ticket })
 }
 
 export async function listPairedDevices(): Promise<PairedDevice[]> {
-	if (!desktopOnly()) return []
+	if (!pairingCapable()) return []
 	return invoke<PairedDevice[]>('list_paired_devices')
 }
 
 export async function forgetPairedDevice(endpointId: string): Promise<void> {
-	if (!desktopOnly()) return
+	if (!pairingCapable()) return
 	await invoke('forget_paired_device', { endpointId })
 }
 
@@ -135,7 +135,7 @@ export async function renamePairedDevice(
 	endpointId: string,
 	displayName: string
 ): Promise<PairedDevice | null> {
-	if (!desktopOnly()) return null
+	if (!pairingCapable()) return null
 	return invoke<PairedDevice>('rename_paired_device', {
 		endpointId,
 		displayName,
@@ -148,7 +148,7 @@ export async function invitePairedDevice(
 	fileCount: number,
 	totalSize: number
 ): Promise<boolean> {
-	if (!desktopOnly()) return false
+	if (!pairingCapable()) return false
 	const result = await invoke<InviteDelivered>('invite_paired_device', {
 		endpointId,
 		blobTicket,
@@ -162,7 +162,7 @@ export async function respondPairedInvite(
 	endpointId: string,
 	accepted: boolean
 ): Promise<void> {
-	if (!desktopOnly()) return
+	if (!pairingCapable()) return
 	await invoke('respond_paired_invite', {
 		endpointId,
 		accepted,

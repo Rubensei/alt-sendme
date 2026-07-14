@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { listen } from '@/lib/platform-api'
-import { IS_DESKTOP } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE } from '@/lib/platform'
 import { getRelayConfigArg } from '@/lib/relay'
 import { reconfigureNodeRelay } from '@/lib/pairing-api'
 import type {
@@ -23,12 +23,12 @@ export function DeviceNodeSync() {
 	// Warm node status + devices/this-device before settings opens, so the
 	// first Devices visit paints complete content instead of loading → ready.
 	useEffect(() => {
-		if (!IS_DESKTOP) return
+		if (!IS_PAIRING_CAPABLE) return
 		void preloadPairingData()
 	}, [])
 
 	useEffect(() => {
-		if (!IS_DESKTOP || !isNodeReady || didSyncRelay.current) return
+		if (!IS_PAIRING_CAPABLE || !isNodeReady || didSyncRelay.current) return
 		didSyncRelay.current = true
 		void reconfigureNodeRelay(getRelayConfigArg()).catch((error) => {
 			// Allow a later retry if the first sync failed (e.g. node still settling).
@@ -38,7 +38,7 @@ export function DeviceNodeSync() {
 	}, [isNodeReady])
 
 	useEffect(() => {
-		if (!IS_DESKTOP) return
+		if (!IS_PAIRING_CAPABLE) return
 
 		let disposed = false
 		let unlistenInvite: (() => void) | undefined

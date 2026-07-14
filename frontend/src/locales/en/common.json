@@ -264,7 +264,7 @@
 		"devices": {
 			"title": "Paired devices",
 			"description": "Pair your devices once, then send files without copying tickets.",
-			"desktopOnly": "Device pairing is available on the desktop app only.",
+			"desktopOnly": "Device pairing is available in the desktop and Android apps.",
 			"nodeUnavailableTitle": "Device pairing is unavailable",
 			"nodeUnavailableHint": "Manual tickets and file sharing still work normally.",
 			"relayChangePairedHint": "Paired devices stay listed. Paired send may not work until both devices can reach each other on the new network setup.",

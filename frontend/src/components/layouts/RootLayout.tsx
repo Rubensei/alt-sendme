@@ -9,9 +9,9 @@ import { PairedInviteDialog } from '../pairing/PairedInviteDialog'
 import { ReceiverProvider } from '../receiver/ReceiverProvider'
 import {
 	IS_ANDROID,
-	IS_DESKTOP,
 	IS_LINUX,
 	IS_MACOS,
+	IS_PAIRING_CAPABLE,
 	IS_TAURI,
 	IS_WEB,
 } from '@/lib/platform'
@@ -21,8 +21,8 @@ export function RootLayout() {
 	return (
 		<ReceiverProvider>
 			{IS_TAURI && !IS_ANDROID && <AppUpdater />}
-			{IS_DESKTOP && <DeviceNodeSync />}
-			{IS_DESKTOP && <PairedInviteDialog />}
+			{IS_PAIRING_CAPABLE && <DeviceNodeSync />}
+			{IS_PAIRING_CAPABLE && <PairedInviteDialog />}
 			<main
 				className={
 					IS_WEB

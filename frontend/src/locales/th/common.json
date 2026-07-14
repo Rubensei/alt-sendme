@@ -312,7 +312,7 @@
 			"codePlaceholder": "วางรหัสจับคู่",
 			"copied": "คัดลอกรหัสจับคู่แล้ว",
 			"description": "จับคู่อุปกรณ์ครั้งเดียว แล้วส่งไฟล์โดยไม่ต้องคัดลอกตั๋ว",
-			"desktopOnly": "การจับคู่อุปกรณ์ใช้ได้เฉพาะในแอปเดสก์ท็อป",
+			"desktopOnly": "การจับคู่อุปกรณ์ใช้ได้ในแอปเดสก์ท็อปและ Android",
 			"deviceName": "ชื่ออุปกรณ์",
 			"deviceNamePlaceholder": "เช่น Tony's MacBook",
 			"devicePaired": "จับคู่อุปกรณ์แล้ว",

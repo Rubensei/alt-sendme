@@ -312,7 +312,7 @@
 			"codePlaceholder": "페어링 코드 붙여넣기",
 			"copied": "페어링 코드가 복사되었습니다",
 			"description": "기기를 한 번 페어링하면 티켓을 복사하지 않고도 파일을 보낼 수 있습니다.",
-			"desktopOnly": "기기 페어링은 데스크톱 앱에서만 사용할 수 있습니다.",
+			"desktopOnly": "기기 페어링은 데스크톱 및 Android 앱에서 사용할 수 있습니다.",
 			"deviceName": "기기 이름",
 			"deviceNamePlaceholder": "예: Tony의 MacBook",
 			"devicePaired": "기기가 페어링되었습니다",

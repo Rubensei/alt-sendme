@@ -312,7 +312,7 @@
 			"codePlaceholder": "Pegar código de emparejamiento",
 			"copied": "Código de emparejamiento copiado",
 			"description": "Empareja tus dispositivos una vez y envía archivos sin copiar tickets.",
-			"desktopOnly": "El emparejamiento de dispositivos solo está disponible en la app de escritorio.",
+			"desktopOnly": "El emparejamiento de dispositivos está disponible en las apps de escritorio y Android.",
 			"deviceName": "Nombre del dispositivo",
 			"deviceNamePlaceholder": "p. ej., MacBook de Tony",
 			"devicePaired": "Dispositivo emparejado",

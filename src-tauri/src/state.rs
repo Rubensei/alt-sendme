@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 /// Application state for managing sharing sessions
 pub struct AppState {
     pub node: Option<Arc<NodeService>>,
-    /// Set when desktop node initialization fails (pairing unavailable; send/receive still work).
+    /// Set when device-node initialization fails (pairing unavailable; send/receive still work).
     pub node_init_error: Option<String>,
     pub current_share: Option<ShareHandle>,
     pub is_share_starting: bool,

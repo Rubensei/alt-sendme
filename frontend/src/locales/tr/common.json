@@ -312,7 +312,7 @@
 			"codePlaceholder": "Eşleştirme kodunu yapıştırın",
 			"copied": "Eşleştirme kodu kopyalandı",
 			"description": "Cihazlarınızı bir kez eşleştirin, ardından anahtar kopyalamadan dosya gönderin.",
-			"desktopOnly": "Cihaz eşleştirme yalnızca masaüstü uygulamasında kullanılabilir.",
+			"desktopOnly": "Cihaz eşleştirme masaüstü ve Android uygulamalarında kullanılabilir.",
 			"deviceName": "Cihaz adı",
 			"deviceNamePlaceholder": "örn. Tony'nin MacBook'u",
 			"devicePaired": "Cihaz eşleştirildi",

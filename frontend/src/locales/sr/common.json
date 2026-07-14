@@ -312,7 +312,7 @@
 			"codePlaceholder": "Nalepi kod za uparivanje",
 			"copied": "Kod za uparivanje kopiran",
 			"description": "Upari uređaje jednom, pa šalji datoteke bez kopiranja karata.",
-			"desktopOnly": "Uparivanje uređaja dostupno je samo u desktop aplikaciji.",
+			"desktopOnly": "Uparivanje uređaja dostupno je u desktop i Android aplikaciji.",
 			"deviceName": "Naziv uređaja",
 			"deviceNamePlaceholder": "npr. Tonyjev MacBook",
 			"devicePaired": "Uređaj uparen",

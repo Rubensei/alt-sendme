@@ -10,7 +10,7 @@ import type { TransferMetadata, TransferProgress } from '../types/transfer'
 import { SpeedAverager, calculateETA } from '../utils/etaUtils'
 import { getRelayConfigArg } from '../lib/relay'
 import { useSenderStore } from '../store/sender-store'
-import { IS_DESKTOP } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE } from '@/lib/platform'
 import {
 	invitePairedDevice,
 	isPairedDeviceActive,
@@ -127,7 +127,7 @@ export function useSender(): UseSenderReturn {
 	)
 
 	const refreshPairedDevices = useCallback(async () => {
-		if (!IS_DESKTOP) {
+		if (!IS_PAIRING_CAPABLE) {
 			setPairedDevices([])
 			return
 		}

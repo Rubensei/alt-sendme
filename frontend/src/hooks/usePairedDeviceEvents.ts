@@ -1,6 +1,6 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import { listen } from '@/lib/platform-api'
-import { IS_DESKTOP } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE } from '@/lib/platform'
 import {
 	patchDevicePresence,
 	type DevicePresencePayload,
@@ -16,7 +16,7 @@ export function usePairedDeviceEvents(options: {
 	const { onPresence, onUnpaired, onRefresh } = options
 
 	useEffect(() => {
-		if (!IS_DESKTOP) return
+		if (!IS_PAIRING_CAPABLE) return
 
 		let disposed = false
 		let unlistenPresence: (() => void) | undefined

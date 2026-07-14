@@ -312,7 +312,7 @@
 			"codePlaceholder": "Incolla codice di associazione",
 			"copied": "Codice di associazione copiato",
 			"description": "Associa i tuoi dispositivi una volta, poi invia file senza copiare ticket.",
-			"desktopOnly": "L’associazione dei dispositivi è disponibile solo nell’app desktop.",
+			"desktopOnly": "L’associazione dei dispositivi è disponibile nelle app desktop e Android.",
 			"deviceName": "Nome dispositivo",
 			"deviceNamePlaceholder": "es. MacBook di Tony",
 			"devicePaired": "Dispositivo associato",

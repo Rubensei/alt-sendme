@@ -15,7 +15,7 @@ import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
 import { toastManager } from '../../ui/toast'
 import { Frame, FrameDescription, FramePanel, FrameTitle } from '../../ui/frame'
-import { IS_DESKTOP } from '@/lib/platform'
+import { IS_PAIRING_CAPABLE } from '@/lib/platform'
 import {
 	deviceSubtitle,
 	isPairedDeviceActive,
@@ -253,7 +253,7 @@ export function DevicesSettings() {
 		})
 	}, [hostPairedCount, t])
 
-	if (!IS_DESKTOP) {
+	if (!IS_PAIRING_CAPABLE) {
 		return (
 			<Frame>
 				<FramePanel>

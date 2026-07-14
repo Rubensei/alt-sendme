@@ -1,9 +1,10 @@
-//! Persistent Iroh node identity (`SecretKey`) for desktop builds.
+//! Persistent Iroh node identity (`SecretKey`) for desktop and Android.
 //!
 //! Storage priority:
 //! 1. `IROH_SECRET` env var (explicit override; not written to disk)
 //! 2. `identity.key` in the app data directory (32 raw bytes; source of truth)
-//! 3. OS keychain entry (legacy; migrated into `identity.key` on first load)
+//! 3. OS keychain entry (legacy desktop; migrated into `identity.key` on first load;
+//!    skipped on Android where keyring has no real credential store)
 //!
 //! On conflict between file and keychain, the file wins and keychain is re-synced.
 
