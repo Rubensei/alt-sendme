@@ -117,12 +117,9 @@ export function usePairing() {
 	}, [refreshDevices])
 
 	usePairedDeviceEvents({
-		onPresence: useCallback(
-			(payload) => {
-				applyPresencePatch(setDevices, payload)
-			},
-			[]
-		),
+		onPresence: useCallback((payload) => {
+			applyPresencePatch(setDevices, payload)
+		}, []),
 		onUnpaired: useCallback(
 			(payload: DeviceUnpairedPayload) => {
 				if (payload.reason === 'remote') {
@@ -198,14 +195,11 @@ export function usePairing() {
 		[refreshDevices]
 	)
 
-	const renameThisDevice = useCallback(
-		async (displayName: string) => {
-			const updated = await setDeviceDisplayName(displayName)
-			if (updated) setThisDevice(updated)
-			return updated
-		},
-		[]
-	)
+	const renameThisDevice = useCallback(async (displayName: string) => {
+		const updated = await setDeviceDisplayName(displayName)
+		if (updated) setThisDevice(updated)
+		return updated
+	}, [])
 
 	const renameDevice = useCallback(
 		async (endpointId: string, displayName: string) => {

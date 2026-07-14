@@ -137,3 +137,15 @@ impl TestFixture {
         out
     }
 }
+
+/// Poll `check` every 500ms until it returns true or `deadline` elapses.
+pub async fn wait_until(what: &str, deadline: std::time::Duration, check: impl Fn() -> bool) {
+    let end = tokio::time::Instant::now() + deadline;
+    while !check() {
+        assert!(
+            tokio::time::Instant::now() < end,
+            "timed out waiting for {what}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+}

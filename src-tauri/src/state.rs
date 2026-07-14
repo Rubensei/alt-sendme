@@ -52,11 +52,7 @@ impl ShareHandle {
     pub async fn stop(&mut self) -> Result<(), String> {
         use std::time::Duration;
 
-        match tokio::time::timeout(
-            Duration::from_secs(2),
-            self.send_result.router.shutdown(),
-        )
-        .await
+        match tokio::time::timeout(Duration::from_secs(2), self.send_result.router.shutdown()).await
         {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {

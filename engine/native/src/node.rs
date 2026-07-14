@@ -662,8 +662,14 @@ impl ControlProtocol {
                 kind = control_message_kind(&msg),
                 role = "receiver"
             );
-            self.handle_paired_control_message(&remote, &keying, msg, conn_side, bi_index)
+            let unpaired = self
+                .handle_paired_control_message(&remote, &keying, msg, conn_side, bi_index)
                 .await;
+            if unpaired {
+                // Close so the sender's delivery wait resolves promptly.
+                conn.close(0u32.into(), b"unpaired");
+                break;
+            }
         }
 
         self.ctx
@@ -682,6 +688,7 @@ impl ControlProtocol {
         Ok(())
     }
 
+    /// Returns true when the peer unpaired us and the session should close.
     async fn handle_paired_control_message(
         &self,
         remote: &EndpointId,
@@ -689,7 +696,7 @@ impl ControlProtocol {
         msg: ControlMessage,
         conn_side: Side,
         bi_index: u32,
-    ) {
+    ) -> bool {
         match msg {
             ControlMessage::Invite {
                 blob_ticket,
@@ -775,11 +782,11 @@ impl ControlProtocol {
                         remote = %remote,
                         role = "receiver"
                     );
-                    if let Ok(Some(device)) = self
+                    let marked = self
                         .ctx
                         .paired_store
-                        .mark_unpaired_remotely(&remote.to_string())
-                    {
+                        .mark_unpaired_remotely(&remote.to_string());
+                    if let Ok(Some(device)) = marked {
                         {
                             let mut access = self.ctx.access.write().await;
                             access.allowed.remove(remote);
@@ -812,6 +819,7 @@ impl ControlProtocol {
                             );
                         }
                     }
+                    return true;
                 } else {
                     pairing_flow_warn!(
                         "forget",
@@ -834,6 +842,7 @@ impl ControlProtocol {
                 );
             }
         }
+        false
     }
 
     async fn is_allowed(&self, remote: &EndpointId) -> bool {
@@ -1824,6 +1833,24 @@ async fn send_forget_to_peer(
     write_message(&mut send, &forget)
         .await
         .context("forget write message")?;
+    let _ = send.finish();
+    // The peer closes the connection after reading the message; the timeout
+    // is a flush fallback for older peers that keep it open.
+    match tokio::time::timeout(Duration::from_secs(5), conn.closed()).await {
+        Ok(closed) => pairing_flow!(
+            "forget",
+            "outbound",
+            "forget.notify.peer_closed",
+            remote_endpoint = %remote,
+            close_reason = ?closed
+        ),
+        Err(_) => pairing_flow!(
+            "forget",
+            "outbound",
+            "forget.notify.close_wait_timeout",
+            remote_endpoint = %remote
+        ),
+    }
     pairing_flow!(
         "forget",
         "outbound",

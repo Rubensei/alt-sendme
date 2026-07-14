@@ -142,12 +142,9 @@ export function useSender(): UseSenderReturn {
 	}, [refreshPairedDevices])
 
 	usePairedDeviceEvents({
-		onPresence: useCallback(
-			(payload) => {
-				applyPresencePatch(setPairedDevices, payload)
-			},
-			[]
-		),
+		onPresence: useCallback((payload) => {
+			applyPresencePatch(setPairedDevices, payload)
+		}, []),
 		onUnpaired: useCallback(() => {}, []),
 		onRefresh: refreshPairedDevices,
 	})

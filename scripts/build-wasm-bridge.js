@@ -85,11 +85,10 @@ if (cc) {
 const wasmBridgeDir = path.join(root, 'wasm-bridge')
 env.CARGO_TARGET_DIR = path.join(root, 'wasm-bridge/target')
 
-run(
-	'cargo',
-	['build', '--target', 'wasm32-unknown-unknown', ...cargoRelease],
-	{ cwd: wasmBridgeDir, env }
-)
+run('cargo', ['build', '--target', 'wasm32-unknown-unknown', ...cargoRelease], {
+	cwd: wasmBridgeDir,
+	env,
+})
 
 const wasmPath = path.join(
 	env.CARGO_TARGET_DIR,
@@ -100,9 +99,13 @@ const wasmPath = path.join(
 
 let wasmBindgen = resolveWasmBindgen()
 if (!wasmBindgen) {
-	run('cargo', ['install', 'wasm-bindgen-cli', '--version', '0.2.126', '--locked'], {
-		env,
-	})
+	run(
+		'cargo',
+		['install', 'wasm-bindgen-cli', '--version', '0.2.126', '--locked'],
+		{
+			env,
+		}
+	)
 	wasmBindgen = resolveWasmBindgen()
 }
 if (!wasmBindgen) {

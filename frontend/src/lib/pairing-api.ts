@@ -9,7 +9,10 @@ export interface DeviceInfo {
 	os: string
 }
 
-export type PairingStatus = 'active' | 'unpaired-remotely' | 'stale-local-identity'
+export type PairingStatus =
+	| 'active'
+	| 'unpaired-remotely'
+	| 'stale-local-identity'
 
 export interface PairedDevice {
 	endpoint_id: string
@@ -186,7 +189,9 @@ export function formatDeviceTypeLabel(
 }
 
 export function deviceSubtitle(
-	device: Pick<PairedDevice, 'device_type' | 'os'> | Pick<DeviceInfo, 'device_type' | 'os'>
+	device:
+		| Pick<PairedDevice, 'device_type' | 'os'>
+		| Pick<DeviceInfo, 'device_type' | 'os'>
 ): string {
 	const typeLabel = formatDeviceTypeLabel(device.device_type)
 	const osLabel = formatOsLabel(device.os)

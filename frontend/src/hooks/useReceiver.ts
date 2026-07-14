@@ -497,7 +497,7 @@ export function useReceiver(): UseReceiverReturn {
 		setTicket(newTicket)
 	}
 
-	const handleBrowseFolder = async () => {
+	const handleBrowseFolder = useCallback(async () => {
 		if (isReceiving) return
 		try {
 			let selected: string | null
@@ -532,7 +532,7 @@ export function useReceiver(): UseReceiverReturn {
 				'error'
 			)
 		}
-	}
+	}, [isReceiving, setDownloadsPath, showAlert, t])
 
 	const receiveWithTicket = useCallback(
 		async (ticketValue: string) => {
@@ -541,8 +541,7 @@ export function useReceiver(): UseReceiverReturn {
 			try {
 				if (transferItemCountRef.current == null) {
 					transferItemCountRef.current =
-						previewMetadataRef.current?.itemCount ??
-						previewMetadata?.itemCount
+						previewMetadataRef.current?.itemCount ?? previewMetadata?.itemCount
 				}
 				previewRequestSeqRef.current += 1
 				transferSeqRef.current += 1
@@ -625,9 +624,7 @@ export function useReceiver(): UseReceiverReturn {
 				itemCount: invite.file_count,
 				size: invite.total_size,
 				mimeType:
-					invite.file_count > 1
-						? 'application/x-iroh-collection'
-						: undefined,
+					invite.file_count > 1 ? 'application/x-iroh-collection' : undefined,
 			}
 			setTicket(invite.blob_ticket)
 			setPreviewMetadata(preview)

@@ -134,18 +134,13 @@ export function PairedDevicesPanel({
 									</div>
 								</div>
 								<div className="flex shrink-0 items-center gap-2">
-									<DevicePairingStatus
-										device={device}
-										namespace="sender"
-									/>
+									<DevicePairingStatus device={device} namespace="sender" />
 									<Button
 										type="button"
 										size="sm"
 										variant="outline"
 										disabled={disabled}
-										onClick={() =>
-											onInvitePairedDevice?.(device.endpoint_id)
-										}
+										onClick={() => onInvitePairedDevice?.(device.endpoint_id)}
 									>
 										{inviteStatus === 'sending' ? (
 											<>

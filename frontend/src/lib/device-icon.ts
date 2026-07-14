@@ -1,7 +1,9 @@
 import type { LucideIcon } from 'lucide-react'
 import { Laptop, Monitor, Smartphone, Tablet } from 'lucide-react'
 
-export function deviceTypeIcon(deviceType: string | undefined | null): LucideIcon {
+export function deviceTypeIcon(
+	deviceType: string | undefined | null
+): LucideIcon {
 	switch ((deviceType ?? '').toLowerCase()) {
 		case 'laptop':
 			return Laptop
