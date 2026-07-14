@@ -10,8 +10,9 @@ pub mod types;
 
 pub use control::{ControlMessage, PairingTicket, CONTROL_ALPN, RememberVote, InviteResponse};
 pub use identity::{
-    default_device_type, default_display_name, detect_os, normalize_display_name, DeviceMetaFile,
-    PairedDevice, PairedDeviceList, PairingStatus,
+    default_device_type, default_display_name, detect_os, device_type_from_chassis,
+    device_type_from_mac_model, normalize_display_name, DeviceMetaFile, PairedDevice,
+    PairedDeviceList, PairingStatus,
 };
 pub use pairing::{
     pairing_host_is_persistent, PAIRING_VOTE_TIMEOUT_SECS, PAIRED_INVITE_WAIT_SECS,

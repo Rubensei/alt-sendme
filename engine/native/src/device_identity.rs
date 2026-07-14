@@ -325,9 +325,9 @@ pub fn load_or_create_identity(data_dir: &Path) -> anyhow::Result<DeviceIdentity
         if meta.os.trim().is_empty() {
             meta.os = detect_os();
         }
-        if meta.device_type.trim().is_empty() {
-            meta.device_type = default_device_type();
-        }
+        // Re-detect form factor on load (not user-editable yet) so older
+        // Linux/Windows installs that were hard-coded as "desktop" self-heal.
+        meta.device_type = default_device_type();
         meta
     } else {
         DeviceMetaFile::new(endpoint_id, default_display_name(), default_device_type())

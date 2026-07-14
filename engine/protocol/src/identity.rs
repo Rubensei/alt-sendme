@@ -125,11 +125,204 @@ pub fn default_device_type() -> String {
     if cfg!(any(target_os = "ios", target_os = "android")) {
         "phone".to_string()
     } else if cfg!(target_os = "macos") {
-        // Most Macs running this desktop app are laptops; desktop Macs still
-        // read clearly as "Mac" via the `os` field.
-        "laptop".to_string()
+        detect_macos_device_type().unwrap_or_else(|| "laptop".to_string())
+    } else if cfg!(target_os = "linux") {
+        detect_linux_device_type().unwrap_or_else(|| "desktop".to_string())
+    } else if cfg!(target_os = "windows") {
+        detect_windows_device_type().unwrap_or_else(|| "desktop".to_string())
     } else {
         "desktop".to_string()
+    }
+}
+
+/// Classify a Mac from `hw.model` when the identifier is unambiguous.
+///
+/// Returns `None` for Apple Silicon `Mac##,#` IDs that need a battery check.
+pub fn device_type_from_mac_model(model: &str) -> Option<&'static str> {
+    let lower = model.trim().to_ascii_lowercase();
+    if lower.is_empty() {
+        return None;
+    }
+    // MacBook, MacBookAir, MacBookPro — and any future *Book* marketing name.
+    if lower.contains("book") {
+        return Some("laptop");
+    }
+    if lower.starts_with("imac")
+        || lower.starts_with("macmini")
+        || lower.starts_with("macpro")
+        || lower.starts_with("macstudio")
+    {
+        return Some("desktop");
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn detect_macos_device_type() -> Option<String> {
+    if let Some(model) = macos_hw_model() {
+        if let Some(kind) = device_type_from_mac_model(&model) {
+            return Some(kind.to_string());
+        }
+    }
+    // Ambiguous Mac##,# IDs (and missing sysctl): use internal battery.
+    macos_has_internal_battery().map(|has_battery| {
+        if has_battery {
+            "laptop".to_string()
+        } else {
+            "desktop".to_string()
+        }
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn detect_macos_device_type() -> Option<String> {
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn macos_hw_model() -> Option<String> {
+    let output = std::process::Command::new("sysctl")
+        .args(["-n", "hw.model"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let model = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if model.is_empty() {
+        None
+    } else {
+        Some(model)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_has_internal_battery() -> Option<bool> {
+    let output = std::process::Command::new("pmset")
+        .args(["-g", "batt"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    Some(text.contains("InternalBattery"))
+}
+
+/// Map SMBIOS chassis type codes to a form-factor string.
+///
+/// See [SMBIOS Reference Specification](https://www.dmtf.org/standards/smbios) —
+/// System Enclosure or Chassis Types.
+pub fn device_type_from_chassis(chassis: u32) -> Option<&'static str> {
+    match chassis {
+        // Portable / Laptop / Notebook / Sub Notebook / Convertible
+        8 | 9 | 10 | 14 | 31 => Some("laptop"),
+        // Tablet / Detachable
+        30 | 32 => Some("tablet"),
+        // Hand Held
+        11 => Some("phone"),
+        // Desktop, towers, AIO, server/blade, mini PC, etc.
+        3 | 4 | 5 | 6 | 7 | 13 | 15 | 16 | 17 | 23 | 24 | 28 | 29 | 34 | 35 | 36 => {
+            Some("desktop")
+        }
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn detect_linux_device_type() -> Option<String> {
+    let raw = std::fs::read_to_string("/sys/class/dmi/id/chassis_type").ok()?;
+    let chassis = raw.trim().parse::<u32>().ok()?;
+    device_type_from_chassis(chassis).map(str::to_string)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn detect_linux_device_type() -> Option<String> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn detect_windows_device_type() -> Option<String> {
+    // SMBIOS chassis via WMI needs a process spawn; battery presence is instant
+    // and correctly separates almost all laptops from desktops.
+    windows_has_system_battery().map(|has_battery| {
+        if has_battery {
+            "laptop".to_string()
+        } else {
+            "desktop".to_string()
+        }
+    })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_windows_device_type() -> Option<String> {
+    None
+}
+
+/// `BatteryFlag` bit for "no system battery" from `SYSTEM_POWER_STATUS`.
+#[cfg(target_os = "windows")]
+const BATTERY_FLAG_NO_BATTERY: u8 = 128;
+
+#[cfg(target_os = "windows")]
+fn windows_has_system_battery() -> Option<bool> {
+    #[repr(C)]
+    struct SystemPowerStatus {
+        ac_line_status: u8,
+        battery_flag: u8,
+        battery_life_percent: u8,
+        system_status_flag: u8,
+        battery_life_time: u32,
+        battery_full_life_time: u32,
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetSystemPowerStatus(status: *mut SystemPowerStatus) -> i32;
+    }
+
+    let mut status = SystemPowerStatus {
+        ac_line_status: 0,
+        battery_flag: 0,
+        battery_life_percent: 0,
+        system_status_flag: 0,
+        battery_life_time: 0,
+        battery_full_life_time: 0,
+    };
+    // SAFETY: status is a valid writable SYSTEM_POWER_STATUS.
+    let ok = unsafe { GetSystemPowerStatus(&mut status) };
+    if ok == 0 {
+        return None;
+    }
+    Some(status.battery_flag & BATTERY_FLAG_NO_BATTERY == 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{device_type_from_chassis, device_type_from_mac_model};
+
+    #[test]
+    fn chassis_maps_laptops_and_desktops() {
+        assert_eq!(device_type_from_chassis(9), Some("laptop"));
+        assert_eq!(device_type_from_chassis(10), Some("laptop"));
+        assert_eq!(device_type_from_chassis(14), Some("laptop"));
+        assert_eq!(device_type_from_chassis(31), Some("laptop"));
+        assert_eq!(device_type_from_chassis(3), Some("desktop"));
+        assert_eq!(device_type_from_chassis(7), Some("desktop"));
+        assert_eq!(device_type_from_chassis(13), Some("desktop"));
+        assert_eq!(device_type_from_chassis(35), Some("desktop"));
+        assert_eq!(device_type_from_chassis(30), Some("tablet"));
+        assert_eq!(device_type_from_chassis(2), None);
+    }
+
+    #[test]
+    fn mac_model_maps_clear_identifiers() {
+        assert_eq!(device_type_from_mac_model("MacBookAir10,1"), Some("laptop"));
+        assert_eq!(device_type_from_mac_model("MacBookPro18,3"), Some("laptop"));
+        assert_eq!(device_type_from_mac_model("iMac21,1"), Some("desktop"));
+        assert_eq!(device_type_from_mac_model("Macmini9,1"), Some("desktop"));
+        assert_eq!(device_type_from_mac_model("MacPro7,1"), Some("desktop"));
+        assert_eq!(device_type_from_mac_model("Mac13,1"), None); // ambiguous; needs battery
+        assert_eq!(device_type_from_mac_model("Mac14,7"), None);
     }
 }
 
