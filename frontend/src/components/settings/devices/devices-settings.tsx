@@ -360,7 +360,8 @@ export function DevicesSettings() {
 										{t('common:settings.devices.thisDeviceHint')}
 									</FrameDescription>
 								</div>
-								<div className="flex min-w-0 flex-col gap-3 overflow-hidden">
+								{/* Mobile: stacked. Desktop: name left, pairing code title+code right. */}
+								<div className="flex min-w-0 flex-col gap-3 overflow-hidden sm:flex-row sm:items-start sm:justify-between sm:gap-4">
 									<div className="flex min-w-0 items-start gap-3">
 										<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
 											<ThisDeviceIcon className="h-5 w-5" />
@@ -386,8 +387,7 @@ export function DevicesSettings() {
 											</p>
 										</div>
 									</div>
-									{/* Full-width under the icon row on mobile so the ticket doesn't compete with the name. */}
-									<div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+									<div className="flex min-w-0 flex-col gap-1 sm:items-end">
 										<p className="shrink-0 font-medium">
 											{t('common:settings.devices.pairingCode')}
 										</p>

@@ -38,10 +38,11 @@ interface ToastProviderProps extends Toast.Provider.Props {
 function ToastProvider({
 	children,
 	position = 'bottom-right',
+	timeout = 3000,
 	...props
 }: ToastProviderProps) {
 	return (
-		<Toast.Provider toastManager={toastManager} {...props}>
+		<Toast.Provider toastManager={toastManager} timeout={timeout} {...props}>
 			{children}
 			<Toasts position={position} />
 		</Toast.Provider>
@@ -166,9 +167,17 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
 	)
 }
 
-function AnchoredToastProvider({ children, ...props }: Toast.Provider.Props) {
+function AnchoredToastProvider({
+	children,
+	timeout = 3000,
+	...props
+}: Toast.Provider.Props) {
 	return (
-		<Toast.Provider toastManager={anchoredToastManager} {...props}>
+		<Toast.Provider
+			toastManager={anchoredToastManager}
+			timeout={timeout}
+			{...props}
+		>
 			{children}
 			<AnchoredToasts />
 		</Toast.Provider>
