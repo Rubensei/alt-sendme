@@ -96,9 +96,7 @@ export function PairedDevicesPanel({
 					const isActive = isPairedDeviceActive(device)
 					const isOnline = device.online
 					const isSending = inviteStatus === 'sending'
-					const anotherDeviceSelected = Object.entries(
-						pairedInviteStatus
-					).some(
+					const anotherDeviceSelected = Object.entries(pairedInviteStatus).some(
 						([id, status]) =>
 							id !== device.endpoint_id &&
 							(status === 'sending' || status === 'sent')
@@ -160,9 +158,7 @@ export function PairedDevicesPanel({
 	return (
 		<div
 			className={cn(
-				showSearch
-					? 'flex h-full min-h-0 flex-col gap-2'
-					: 'space-y-4'
+				showSearch ? 'flex h-full min-h-0 flex-col gap-2' : 'space-y-4'
 			)}
 		>
 			{showHeader ? (

@@ -12,7 +12,7 @@ use std::path::PathBuf;
 #[cfg(target_os = "windows")]
 use winreg::enums::*;
 #[cfg(target_os = "windows")]
-use winreg::{HKEY, RegKey};
+use winreg::{RegKey, HKEY};
 
 #[cfg(target_os = "windows")]
 const VERB_NAME: &str = "Send with AltSendme";
@@ -195,12 +195,10 @@ fn remove_verb_from_hive(hive: HKEY) -> anyhow::Result<()> {
 /// Remove leftover HKLM verb keys via an elevated `reg delete` (one UAC prompt).
 #[cfg(target_os = "windows")]
 fn remove_hklm_verb_elevated() -> anyhow::Result<()> {
-    use windows::core::{HSTRING, PCWSTR, w};
+    use windows::core::{w, HSTRING, PCWSTR};
     use windows::Win32::Foundation::{CloseHandle, ERROR_CANCELLED, WAIT_OBJECT_0};
     use windows::Win32::System::Threading::{WaitForSingleObject, INFINITE};
-    use windows::Win32::UI::Shell::{
-        ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
-    };
+    use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
     use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
     let deletes: String = VERB_BASES

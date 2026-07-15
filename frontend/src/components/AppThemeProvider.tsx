@@ -1,10 +1,6 @@
 import { useThemeStore } from '../store'
 import { useEffect } from 'react'
-import {
-	isNamedTheme,
-	resolveColorMode,
-	type AppTheme,
-} from '../types/app'
+import { isNamedTheme, resolveColorMode, type AppTheme } from '../types/app'
 
 type Props = {
 	children: React.ReactNode

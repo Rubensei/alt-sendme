@@ -168,7 +168,9 @@ function stagePortablePayload(releaseDir, stagingAppDir) {
 	const exeName = `${PRODUCT_NAME}.exe`
 	copyFile(builtExe, path.join(stagingAppDir, exeName))
 	if (path.basename(builtExe) !== exeName) {
-		console.log(`Renamed ${path.basename(builtExe)} → ${exeName} for portable ZIP`)
+		console.log(
+			`Renamed ${path.basename(builtExe)} → ${exeName} for portable ZIP`
+		)
 	}
 
 	const loader = path.join(releaseDir, 'WebView2Loader.dll')
@@ -178,7 +180,11 @@ function stagePortablePayload(releaseDir, stagingAppDir) {
 
 	stageResources(releaseDir, stagingAppDir)
 
-	fs.writeFileSync(path.join(stagingAppDir, PORTABLE_MARKER), 'portable\n', 'utf8')
+	fs.writeFileSync(
+		path.join(stagingAppDir, PORTABLE_MARKER),
+		'portable\n',
+		'utf8'
+	)
 	fs.writeFileSync(
 		path.join(stagingAppDir, PORTABLE_README),
 		PORTABLE_README_BODY,
@@ -188,7 +194,9 @@ function stagePortablePayload(releaseDir, stagingAppDir) {
 	const stagedExe = path.join(stagingAppDir, exeName)
 	const stagedMarker = path.join(stagingAppDir, PORTABLE_MARKER)
 	if (!fs.existsSync(stagedExe) || !fs.existsSync(stagedMarker)) {
-		throw new Error('Portable staging incomplete: missing exe or .portable marker')
+		throw new Error(
+			'Portable staging incomplete: missing exe or .portable marker'
+		)
 	}
 }
 

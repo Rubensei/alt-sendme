@@ -59,10 +59,7 @@ export function AppFooter() {
 				<span className="text-sm text-muted-foreground ml-1">
 					{VERSION_DISPLAY}
 				</span>
-				<Separator
-					className="hidden h-6 sm:block"
-					orientation="vertical"
-				/>
+				<Separator className="hidden h-6 sm:block" orientation="vertical" />
 
 				{CONTACTS.map((contact) => (
 					<a
@@ -118,8 +115,9 @@ export function AppFooter() {
 				) : null}
 				<RelayStatusButton />
 				{isSharing ? (
-					<span
-						aria-disabled
+					<button
+						type="button"
+						disabled
 						aria-label={t('settings.title')}
 						className={cn(
 							buttonVariants({
@@ -130,7 +128,7 @@ export function AppFooter() {
 						)}
 					>
 						<SettingsIcon />
-					</span>
+					</button>
 				) : (
 					<Link
 						to="/settings"

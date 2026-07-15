@@ -613,9 +613,7 @@ export function useReceiver(): UseReceiverReturn {
 				await invoke<string>('receive_file', {
 					ticket: ticketValue.trim(),
 					outputPath,
-					treeUri: IS_ANDROID
-						? downloadsUriRef.current.trim() || null
-						: null,
+					treeUri: IS_ANDROID ? downloadsUriRef.current.trim() || null : null,
 					relay: getRelayConfigArg(),
 				})
 			} catch (error) {

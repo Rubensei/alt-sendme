@@ -463,11 +463,7 @@ fn finalize_android_receive(
 }
 
 #[cfg(target_os = "android")]
-fn emit_receive_download_fallback(
-    app_handle: &tauri::AppHandle,
-    staging_dir: &Path,
-    reason: &str,
-) {
+fn emit_receive_download_fallback(app_handle: &tauri::AppHandle, staging_dir: &Path, reason: &str) {
     let payload = serde_json::json!({
         "path": staging_dir.to_string_lossy(),
         "reason": reason,
@@ -755,7 +751,6 @@ pub async fn verify_relays(relay: RelayConfigArg) -> Result<VerifyRelaysResponse
 
 #[cfg(any(desktop, target_os = "android"))]
 pub async fn init_node_service(app_handle: tauri::AppHandle) -> Result<(), String> {
-
     let data_dir = app_handle
         .path()
         .app_data_dir()
@@ -770,10 +765,7 @@ pub async fn init_node_service(app_handle: tauri::AppHandle) -> Result<(), Strin
     let boxed_handle: AppHandle = Some(emitter);
     let node = NodeService::start(&data_dir, relay_mode, boxed_handle)
         .await
-        .map_err(|e| {
-
-            format!("Failed to start device node: {e}")
-        })?;
+        .map_err(|e| format!("Failed to start device node: {e}"))?;
     let state = app_handle.state::<AppStateMutex>();
     let mut guard = state.lock().await;
     guard.node = Some(Arc::new(node));
@@ -832,14 +824,12 @@ pub async fn reconfigure_node_relay(
     relay: Option<RelayConfigArg>,
     state: State<'_, AppStateMutex>,
 ) -> Result<(), String> {
-
     let (relay_mode, _) = resolve_relay_mode_with_fallback(relay).await?;
     let relay_mode: iroh::endpoint::RelayMode = relay_mode.into();
 
     let node = {
         let guard = state.lock().await;
         if guard.current_share.is_some() || guard.is_share_starting {
-
             return Err(
                 "Stop sharing before changing relay settings for paired devices.".to_string(),
             );
@@ -850,10 +840,9 @@ pub async fn reconfigure_node_relay(
             .ok_or_else(|| "Device pairing is not available on this device.".to_string())?
     };
 
-    node.reconfigure_relay(relay_mode).await.map_err(|e| {
-
-        format!("Failed to update device relay: {e}")
-    })?;
+    node.reconfigure_relay(relay_mode)
+        .await
+        .map_err(|e| format!("Failed to update device relay: {e}"))?;
 
     Ok(())
 }
@@ -879,13 +868,11 @@ pub async fn set_device_display_name(
     display_name: String,
     state: State<'_, AppStateMutex>,
 ) -> Result<DeviceInfo, String> {
-
     let guard = state.lock().await;
     let node = require_node(&guard)?;
-    let info = node.set_device_display_name(&display_name).map_err(|e| {
-
-        e.to_string()
-    })?;
+    let info = node
+        .set_device_display_name(&display_name)
+        .map_err(|e| e.to_string())?;
 
     Ok(info)
 }
@@ -897,15 +884,11 @@ pub async fn rename_paired_device(
     display_name: String,
     state: State<'_, AppStateMutex>,
 ) -> Result<PairedDevice, String> {
-
     let guard = state.lock().await;
     let node = require_node(&guard)?;
     let device = node
         .rename_paired(&endpoint_id, &display_name)
-        .map_err(|e| {
-
-            e.to_string()
-        })?;
+        .map_err(|e| e.to_string())?;
 
     Ok(device)
 }

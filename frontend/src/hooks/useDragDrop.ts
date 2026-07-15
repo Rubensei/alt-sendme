@@ -196,11 +196,7 @@ export function useDragDrop(
 					setCopyFileName('')
 					setCopyTotalBytes('0')
 					cancelRef.current = null
-					showAlert(
-						t('common:errors.fileDialogFailed'),
-						message,
-						'error'
-					)
+					showAlert(t('common:errors.fileDialogFailed'), message, 'error')
 				}
 			)
 

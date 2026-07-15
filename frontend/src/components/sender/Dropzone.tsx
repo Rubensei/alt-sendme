@@ -14,12 +14,7 @@ import { useTranslation } from '../../i18n/react-i18next-compat'
 import type { DropzoneProps } from '../../types/sender'
 import { getPreviewFileIcon } from '../../lib/fileIcons'
 import { Button } from '../ui/button'
-import {
-	Menu,
-	MenuItem,
-	MenuPopup,
-	MenuTrigger,
-} from '../ui/menu'
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from '../ui/menu'
 import {
 	Tooltip,
 	TooltipContent,

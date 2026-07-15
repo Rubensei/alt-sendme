@@ -8,7 +8,10 @@ import type {
 	PairedInviteResponsePayload,
 } from '@/lib/pairing-api'
 import { usePairedInviteStore } from '@/store/paired-invite-store'
-import { usePairingDataStore, preloadPairingData } from '@/store/pairing-data-store'
+import {
+	usePairingDataStore,
+	preloadPairingData,
+} from '@/store/pairing-data-store'
 import { ensureNodeCapabilityLifecycle } from '@/store/node-capability-store'
 import { useNodeCapability } from '@/hooks/useNodeCapability'
 import { useTranslation } from '@/i18n'
@@ -88,9 +91,7 @@ export function DeviceNodeSync() {
 							title: t('common:sender.pairedDevices.inviteDeclined', {
 								name,
 							}),
-							description: t(
-								'common:sender.pairedDevices.inviteDeclinedDesc'
-							),
+							description: t('common:sender.pairedDevices.inviteDeclinedDesc'),
 							type: 'warning',
 						})
 					} catch {

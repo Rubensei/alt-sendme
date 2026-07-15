@@ -104,13 +104,17 @@ function normalizeScope(scope) {
 
 function normalizeCommit(commit) {
 	const scope = normalizeScope(commit.scope)
-	let subject = commit.subject
+	const subject = commit.subject
 
 	if (/^prototype for pair mode$/i.test(subject)) {
 		return null
 	}
 
-	if (!scope && FEATURE_TYPES.has(commit.type) && PAIRING_KEYWORDS.test(subject)) {
+	if (
+		!scope &&
+		FEATURE_TYPES.has(commit.type) &&
+		PAIRING_KEYWORDS.test(subject)
+	) {
 		return { ...commit, scope: 'pairing', subject }
 	}
 
@@ -208,15 +212,13 @@ function pickHighlights(featureCommits) {
 		.map((entry) => entry.text)
 }
 
-function getCommitRange(currentTag, previousTag) {
+function getCommitRange(_currentTag, previousTag) {
 	if (!previousTag) return 'HEAD'
 	return `${previousTag}..HEAD`
 }
 
 function getPreviousTag(currentTag) {
-	const tags = sh('git tag --sort=-v:refname')
-		.split('\n')
-		.filter(Boolean)
+	const tags = sh('git tag --sort=-v:refname').split('\n').filter(Boolean)
 
 	return tags.find((tag) => tag !== currentTag) ?? ''
 }
@@ -228,20 +230,25 @@ function loadCommitAuthors(commitRange) {
 
 	if (!raw) return []
 
-	return raw.split('\n').filter(Boolean).map((line) => {
-		const [name, email, subject] = line.split('|')
-		const parsed = parseCommit(subject)
-		return {
-			name,
-			email,
-			subject,
-			...parsed,
-		}
-	})
+	return raw
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => {
+			const [name, email, subject] = line.split('|')
+			const parsed = parseCommit(subject)
+			return {
+				name,
+				email,
+				subject,
+				...parsed,
+			}
+		})
 }
 
 function resolveGithubLogin(name, email) {
-	const noreplyMatch = email.match(/^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/i)
+	const noreplyMatch = email.match(
+		/^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/i
+	)
 	if (noreplyMatch) return noreplyMatch[1]
 
 	const alias = AUTHOR_LOGIN_ALIASES[name.trim().toLowerCase()]
@@ -254,14 +261,17 @@ function authorHasPriorContributions(name, email, previousTag) {
 	if (!previousTag) return false
 
 	try {
-		const history = sh(`git log ${previousTag} --pretty=format:'%an|%ae' --no-merges`)
+		const history = sh(
+			`git log ${previousTag} --pretty=format:'%an|%ae' --no-merges`
+		)
 		if (!history) return false
 
 		const login = resolveGithubLogin(name, email)
 		return history.split('\n').some((line) => {
 			const [priorName, priorEmail] = line.split('|')
 			if (priorEmail === email) return true
-			if (login && resolveGithubLogin(priorName, priorEmail) === login) return true
+			if (login && resolveGithubLogin(priorName, priorEmail) === login)
+				return true
 			return priorName.trim().toLowerCase() === name.trim().toLowerCase()
 		})
 	} catch {
@@ -275,9 +285,7 @@ function describeContributorWork(commits) {
 	for (const commit of commits) {
 		if (FIX_TYPES.has(commit.type)) {
 			areas.add(
-				commit.scope
-					? `${formatScopeLabel(commit.scope)} fixes`
-					: 'bug fixes'
+				commit.scope ? `${formatScopeLabel(commit.scope)} fixes` : 'bug fixes'
 			)
 			continue
 		}
@@ -307,9 +315,7 @@ function describeContributorWork(commits) {
 function buildContributorCredit(contributors) {
 	if (contributors.length === 0) return null
 
-	const parts = contributors.map(
-		({ login, work }) => `@${login} for ${work}`
-	)
+	const parts = contributors.map(({ login, work }) => `@${login} for ${work}`)
 
 	if (parts.length === 1) {
 		return `Thanking ${parts[0]}.`
@@ -401,9 +407,7 @@ function renderContributorSections(contributorData, githubNewContributors) {
 }
 
 function loadCommits(commitRange) {
-	const raw = sh(
-		`git log ${commitRange} --pretty=format:%s --no-merges`
-	)
+	const raw = sh(`git log ${commitRange} --pretty=format:%s --no-merges`)
 
 	if (!raw) return []
 
@@ -568,7 +572,9 @@ function writeGithubOutput(notes) {
 
 function main() {
 	const currentTag =
-		process.env.CURRENT_TAG ?? process.argv[2] ?? sh('git describe --tags --exact-match 2>/dev/null || true')
+		process.env.CURRENT_TAG ??
+		process.argv[2] ??
+		sh('git describe --tags --exact-match 2>/dev/null || true')
 	const repository =
 		process.env.GITHUB_REPOSITORY ??
 		sh('git remote get-url origin')
@@ -587,8 +593,7 @@ function main() {
 		// Local runs may not have remotes; continue with local tags.
 	}
 
-	const previousTag =
-		process.env.PREVIOUS_TAG ?? getPreviousTag(currentTag)
+	const previousTag = process.env.PREVIOUS_TAG ?? getPreviousTag(currentTag)
 	const commitRange = getCommitRange(currentTag, previousTag)
 	const commits = loadCommits(commitRange)
 	const githubBody = tryGithubGeneratedNotes(

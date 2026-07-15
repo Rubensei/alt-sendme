@@ -33,8 +33,7 @@ export const usePairingDataStore = create<PairingDataState>((set) => ({
 	hasHydrated: !IS_PAIRING_CAPABLE,
 	setDevices: (devices) =>
 		set((state) => ({
-			devices:
-				typeof devices === 'function' ? devices(state.devices) : devices,
+			devices: typeof devices === 'function' ? devices(state.devices) : devices,
 		})),
 	setThisDevice: (thisDevice) => set({ thisDevice }),
 	hydrate: async () => {

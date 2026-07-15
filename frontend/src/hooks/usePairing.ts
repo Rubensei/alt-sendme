@@ -57,7 +57,7 @@ export function usePairing() {
 	useEffect(() => {
 		if (!hasResolved) return
 		void hydrate()
-	}, [hasResolved, isNodeReady, hydrate])
+	}, [hasResolved, hydrate])
 
 	useEffect(() => {
 		if (!IS_PAIRING_CAPABLE) return

@@ -40,92 +40,93 @@ export function isNodeStatusSettled(nodeStatus: NodeStatus): boolean {
 	return Boolean(nodeStatus.reason)
 }
 
-export const useNodeCapabilityStore = create<NodeCapabilityState>((set, get) => ({
-	nodeStatus: IS_PAIRING_CAPABLE
-		? { status: 'starting' }
-		: { status: 'unavailable', reason: 'desktop_only' },
-	hasResolved: !IS_PAIRING_CAPABLE,
-	isNetworkReady: !IS_PAIRING_CAPABLE,
-	refresh: async () => {
-		if (!IS_PAIRING_CAPABLE) {
-			set({
-				nodeStatus: { status: 'unavailable', reason: 'desktop_only' },
-				hasResolved: true,
-				isNetworkReady: true,
-			})
-			return
-		}
-
-		if (refreshInFlight) return refreshInFlight
-
-		refreshInFlight = (async () => {
-			try {
-				const nodeStatus = await getNodeStatus()
-
-				if (isNodeStatusSettled(nodeStatus)) {
-					clearFallback()
-					set({
-						nodeStatus,
-						hasResolved: true,
-						isNetworkReady:
-							nodeStatus.status === 'ready'
-								? Boolean(nodeStatus.network_ready)
-								: false,
-					})
-					return
-				}
-
+export const useNodeCapabilityStore = create<NodeCapabilityState>(
+	(set, get) => ({
+		nodeStatus: IS_PAIRING_CAPABLE
+			? { status: 'starting' }
+			: { status: 'unavailable', reason: 'desktop_only' },
+		hasResolved: !IS_PAIRING_CAPABLE,
+		isNetworkReady: !IS_PAIRING_CAPABLE,
+		refresh: async () => {
+			if (!IS_PAIRING_CAPABLE) {
 				set({
-					nodeStatus: {
-						status: 'starting',
-						reason: nodeStatus.reason ?? null,
-					},
-					hasResolved: false,
-					isNetworkReady: false,
+					nodeStatus: { status: 'unavailable', reason: 'desktop_only' },
+					hasResolved: true,
+					isNetworkReady: true,
 				})
+				return
+			}
 
-				if (waitStartedAt == null) waitStartedAt = Date.now()
-				if (Date.now() - waitStartedAt >= WAIT_MAX_MS) {
+			if (refreshInFlight) return refreshInFlight
+
+			refreshInFlight = (async () => {
+				try {
+					const nodeStatus = await getNodeStatus()
+
+					if (isNodeStatusSettled(nodeStatus)) {
+						clearFallback()
+						set({
+							nodeStatus,
+							hasResolved: true,
+							isNetworkReady:
+								nodeStatus.status === 'ready'
+									? Boolean(nodeStatus.network_ready)
+									: false,
+						})
+						return
+					}
+
+					set({
+						nodeStatus: {
+							status: 'starting',
+							reason: nodeStatus.reason ?? null,
+						},
+						hasResolved: false,
+						isNetworkReady: false,
+					})
+
+					if (waitStartedAt == null) waitStartedAt = Date.now()
+					if (Date.now() - waitStartedAt >= WAIT_MAX_MS) {
+						clearFallback()
+						set({
+							nodeStatus: {
+								status: 'unavailable',
+								reason:
+									nodeStatus.reason ?? 'Device node failed to start in time.',
+							},
+							hasResolved: true,
+							isNetworkReady: false,
+						})
+						return
+					}
+
+					// Event-driven path is primary; light recheck covers a missed emit.
+					if (fallbackTimer == null) {
+						fallbackTimer = setTimeout(() => {
+							fallbackTimer = null
+							void get().refresh()
+						}, FALLBACK_RECHECK_MS)
+					}
+				} catch (error) {
+					console.error('Failed to get node status:', error)
 					clearFallback()
 					set({
 						nodeStatus: {
 							status: 'unavailable',
-							reason:
-								nodeStatus.reason ??
-								'Device node failed to start in time.',
+							reason: String(error),
 						},
 						hasResolved: true,
 						isNetworkReady: false,
 					})
-					return
+				} finally {
+					refreshInFlight = null
 				}
+			})()
 
-				// Event-driven path is primary; light recheck covers a missed emit.
-				if (fallbackTimer == null) {
-					fallbackTimer = setTimeout(() => {
-						fallbackTimer = null
-						void get().refresh()
-					}, FALLBACK_RECHECK_MS)
-				}
-			} catch (error) {
-				console.error('Failed to get node status:', error)
-				clearFallback()
-				set({
-					nodeStatus: {
-						status: 'unavailable',
-						reason: String(error),
-					},
-					hasResolved: true,
-					isNetworkReady: false,
-				})
-			} finally {
-				refreshInFlight = null
-			}
-		})()
-
-		return refreshInFlight
-	},
-}))
+			return refreshInFlight
+		},
+	})
+)
 
 /** Listen for native node lifecycle events and keep status fresh app-wide. */
 export function ensureNodeCapabilityLifecycle() {

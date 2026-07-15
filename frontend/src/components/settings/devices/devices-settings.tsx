@@ -270,7 +270,7 @@ export function DevicesSettings() {
 
 	const copyPairingCode = async () => {
 		try {
-			let code = pairingCode ?? pairingTicket
+			const code = pairingCode ?? pairingTicket
 			if (code) {
 				await navigator.clipboard.writeText(code)
 				setCopied(true)
@@ -315,7 +315,11 @@ export function DevicesSettings() {
 	return (
 		<div className="flex flex-col gap-4">
 			{!readyToPaint ? (
-				<div aria-busy="true" aria-label={t('common:loading')}>
+				<div
+					role="status"
+					aria-busy="true"
+					aria-label={t('common:loading')}
+				>
 					<Frame>
 						<FramePanel className="flex flex-col gap-6 min-h-48">
 							<div className="space-y-2">
@@ -525,9 +529,7 @@ export function DevicesSettings() {
 																</p>
 																{!isActive ? (
 																	<p className="mt-1 text-xs text-muted-foreground">
-																		{t(
-																			'common:settings.devices.unpairedHint'
-																		)}
+																		{t('common:settings.devices.unpairedHint')}
 																	</p>
 																) : null}
 															</div>
