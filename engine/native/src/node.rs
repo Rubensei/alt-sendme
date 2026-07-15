@@ -70,7 +70,8 @@ struct ControlCtx {
     access: Arc<RwLock<AccessState>>,
     pairing_host_persistent: Arc<AtomicBool>,
     app_handle: AppHandle,
-    home_relay_url: Option<String>,
+    /// Updated in the background once the endpoint reaches a home relay.
+    home_relay_url: Arc<std::sync::RwLock<Option<String>>>,
     presence: Arc<std::sync::RwLock<HashMap<String, bool>>>,
     paired_connections: Arc<PairedConnectionManager>,
 }
@@ -267,6 +268,12 @@ impl ControlProtocol {
                 }) = &remote_info
                 {
                     let now = protocol::identity::unix_now_ms();
+                    let relay_url = self
+                        .ctx
+                        .home_relay_url
+                        .read()
+                        .expect("home_relay_url")
+                        .clone();
                     let device = PairedDevice {
                         endpoint_id: endpoint_id.clone(),
                         display_name: display_name.clone(),
@@ -274,7 +281,7 @@ impl ControlProtocol {
                         os: os.clone(),
                         paired_at: now,
                         last_seen_at: now,
-                        relay_url: self.ctx.home_relay_url.clone(),
+                        relay_url,
                         pairing_status: PairingStatus::Active,
                     };
                     let _ = self.ctx.paired_store.remember(device);
@@ -519,6 +526,8 @@ pub struct NodeService {
     access: Arc<RwLock<AccessState>>,
     pairing_host_open: Arc<AtomicBool>,
     pairing_host_persistent: Arc<AtomicBool>,
+    /// True after the endpoint has reached its home relay (or relay is disabled).
+    network_ready: Arc<AtomicBool>,
     pairing_expire_task: Mutex<Option<JoinHandle<()>>>,
     paired_connections: Arc<PairedConnectionManager>,
     connections_supervisor: Mutex<Option<JoinHandle<()>>>,
@@ -565,6 +574,7 @@ impl NodeService {
         }));
         let pairing_host_open = Arc::new(AtomicBool::new(false));
         let pairing_host_persistent = Arc::new(AtomicBool::new(false));
+        let network_ready = Arc::new(AtomicBool::new(false));
         let presence = Arc::new(std::sync::RwLock::new(HashMap::new()));
 
         let paired_connections = Arc::new(PairedConnectionManager::new(
@@ -582,6 +592,7 @@ impl NodeService {
             app_handle.clone(),
             presence.clone(),
             paired_connections.clone(),
+            network_ready.clone(),
             relay_mode.clone(),
         )
         .await?;
@@ -596,6 +607,7 @@ impl NodeService {
             access,
             pairing_host_open,
             pairing_host_persistent,
+            network_ready,
             pairing_expire_task: Mutex::new(None),
             paired_connections,
             connections_supervisor: Mutex::new(Some(connections_supervisor)),
@@ -632,6 +644,11 @@ impl NodeService {
 
         self.stop_pairing_host().await;
 
+        self.network_ready.store(false, Ordering::SeqCst);
+        if let Some(handle) = &self.app_handle {
+            let _ = handle.emit_event("device-node-network-warming");
+        }
+
         let mut runtime = self.runtime.lock().await;
         runtime.router.shutdown().await?;
         runtime.endpoint.close().await;
@@ -644,6 +661,7 @@ impl NodeService {
             self.app_handle.clone(),
             self.presence.clone(),
             self.paired_connections.clone(),
+            self.network_ready.clone(),
             relay_mode.clone(),
         )
         .await?;
@@ -653,6 +671,10 @@ impl NodeService {
         *self.relay_mode.lock().await = relay_mode;
 
         Ok(())
+    }
+
+    pub fn is_network_ready(&self) -> bool {
+        self.network_ready.load(Ordering::SeqCst)
     }
 
     pub fn device_info(&self) -> DeviceInfo {
@@ -1139,6 +1161,13 @@ async fn send_forget_to_peer(
     Ok(())
 }
 
+fn endpoint_home_relay_url(endpoint: &Endpoint) -> Option<String> {
+    let mut local_addr = endpoint.addr();
+    apply_options(&mut local_addr, AddrInfoOptions::Relay);
+    let url = local_addr.relay_urls().next().map(|u| u.to_string());
+    url
+}
+
 async fn build_runtime(
     identity: Arc<DeviceIdentity>,
     paired_store: Arc<PairedDeviceStore>,
@@ -1147,6 +1176,7 @@ async fn build_runtime(
     app_handle: AppHandle,
     presence: Arc<std::sync::RwLock<HashMap<String, bool>>>,
     paired_connections: Arc<PairedConnectionManager>,
+    network_ready: Arc<AtomicBool>,
     relay_mode: RelayMode,
 ) -> anyhow::Result<NodeRuntime> {
 
@@ -1157,17 +1187,15 @@ async fn build_runtime(
     let endpoint = Endpoint::builder(presets::N0)
         .secret_key(identity.secret_key.clone())
         .address_lookup(PkarrPublisher::n0_dns())
-        .relay_mode(relay_mode)
+        .relay_mode(relay_mode.clone())
         .hooks(hook)
         .alpns(vec![CONTROL_ALPN.to_vec()])
         .bind()
         .await?;
 
-    endpoint.online().await;
-
-    let mut local_addr = endpoint.addr();
-    apply_options(&mut local_addr, AddrInfoOptions::Relay);
-    let home_relay_url = local_addr.relay_urls().next().map(|u| u.to_string());
+    // Publish the node immediately after bind so pairing UI/API are available
+    // without waiting on relay home connection (often several seconds on mobile).
+    let home_relay_url = Arc::new(std::sync::RwLock::new(endpoint_home_relay_url(&endpoint)));
 
     let control = ControlProtocol {
         ctx: ControlCtx {
@@ -1175,8 +1203,8 @@ async fn build_runtime(
             paired_store,
             access,
             pairing_host_persistent,
-            app_handle,
-            home_relay_url,
+            app_handle: app_handle.clone(),
+            home_relay_url: home_relay_url.clone(),
             presence,
             paired_connections,
         },
@@ -1185,6 +1213,34 @@ async fn build_runtime(
     let router = Router::builder(endpoint.clone())
         .accept(CONTROL_ALPN, control)
         .spawn();
+
+    let mark_network_ready = {
+        let network_ready = network_ready.clone();
+        let home_relay_url = home_relay_url.clone();
+        let app_handle = app_handle.clone();
+        move |endpoint: &Endpoint| {
+            if let Some(url) = endpoint_home_relay_url(endpoint) {
+                if let Ok(mut guard) = home_relay_url.write() {
+                    *guard = Some(url);
+                }
+            }
+            network_ready.store(true, Ordering::SeqCst);
+            if let Some(handle) = &app_handle {
+                let _ = handle.emit_event("device-node-network-ready");
+            }
+        }
+    };
+
+    // No relay path to wait on — treat network as ready immediately.
+    if matches!(relay_mode, RelayMode::Disabled) {
+        mark_network_ready(&endpoint);
+    } else {
+        let online_endpoint = endpoint.clone();
+        tokio::spawn(async move {
+            online_endpoint.online().await;
+            mark_network_ready(&online_endpoint);
+        });
+    }
 
     Ok(NodeRuntime { endpoint, router })
 }

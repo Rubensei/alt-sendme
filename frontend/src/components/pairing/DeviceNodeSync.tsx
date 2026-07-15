@@ -8,7 +8,8 @@ import type {
 	PairedInviteResponsePayload,
 } from '@/lib/pairing-api'
 import { usePairedInviteStore } from '@/store/paired-invite-store'
-import { preloadPairingData } from '@/store/pairing-data-store'
+import { usePairingDataStore, preloadPairingData } from '@/store/pairing-data-store'
+import { ensureNodeCapabilityLifecycle } from '@/store/node-capability-store'
 import { useNodeCapability } from '@/hooks/useNodeCapability'
 import { useTranslation } from '@/i18n'
 import { toastManager } from '../ui/toast'
@@ -24,8 +25,15 @@ export function DeviceNodeSync() {
 	// first Devices visit paints complete content instead of loading → ready.
 	useEffect(() => {
 		if (!IS_PAIRING_CAPABLE) return
+		ensureNodeCapabilityLifecycle()
 		void preloadPairingData()
 	}, [])
+
+	// Preload may finish while the node is still starting; hydrate once ready.
+	useEffect(() => {
+		if (!IS_PAIRING_CAPABLE || !isNodeReady) return
+		void usePairingDataStore.getState().hydrate()
+	}, [isNodeReady])
 
 	useEffect(() => {
 		if (!IS_PAIRING_CAPABLE || !isNodeReady || didSyncRelay.current) return

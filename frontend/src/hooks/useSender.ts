@@ -49,6 +49,7 @@ export interface UseSenderReturn {
 	activeConnectionCount: number
 	pairedDevices: PairedDevice[]
 	isNodeReady: boolean
+	isNodeStatusPending?: boolean
 	pairedInviteStatus: Record<string, PairedInviteStatus>
 	onInvitePairedDevice: (endpointId: string) => Promise<boolean>
 
@@ -109,7 +110,7 @@ export function useSender(): UseSenderReturn {
 	const [pairedInviteStatus, setPairedInviteStatus] = useState<
 		Record<string, PairedInviteStatus>
 	>({})
-	const { isNodeReady } = useNodeCapability()
+	const { isNodeReady, isNodeStatusPending } = useNodeCapability()
 
 	const setInviteStatus = useCallback(
 		(endpointId: string, status: PairedInviteStatus | null) => {
@@ -1031,6 +1032,7 @@ export function useSender(): UseSenderReturn {
 		activeConnectionCount,
 		pairedDevices,
 		isNodeReady,
+		isNodeStatusPending,
 		pairedInviteStatus,
 		onInvitePairedDevice,
 

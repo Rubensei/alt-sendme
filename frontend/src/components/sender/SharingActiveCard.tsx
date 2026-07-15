@@ -25,6 +25,7 @@ export function SharingActiveCard({
 	activeConnectionCount = 0,
 	pairedDevices = [],
 	isNodeReady = false,
+	isNodeStatusPending = false,
 	pairedInviteStatus = {},
 	onInvitePairedDevice,
 	onCopyTicket,
@@ -72,6 +73,7 @@ export function SharingActiveCard({
 								pairedDevices={pairedDevices}
 								pairedInviteStatus={pairedInviteStatus}
 								isNodeReady={isNodeReady}
+								isNodeStatusPending={isNodeStatusPending}
 								hasTicket={Boolean(ticket)}
 								onInvitePairedDevice={onInvitePairedDevice}
 								onInviteSuccess={() => setDevicesOpen(false)}

@@ -55,11 +55,13 @@ export interface InviteDelivered {
 	delivered: boolean
 }
 
-export type NodeStatusKind = 'ready' | 'unavailable'
+export type NodeStatusKind = 'ready' | 'starting' | 'unavailable'
 
 export interface NodeStatus {
 	status: NodeStatusKind
 	reason?: string | null
+	/** True once the pairing node has warmed its relay/network path. */
+	network_ready?: boolean
 }
 
 function pairingCapable(): boolean {
@@ -68,7 +70,11 @@ function pairingCapable(): boolean {
 
 export async function getNodeStatus(): Promise<NodeStatus> {
 	if (!pairingCapable()) {
-		return { status: 'unavailable', reason: 'desktop_only' }
+		return {
+			status: 'unavailable',
+			reason: 'desktop_only',
+			network_ready: false,
+		}
 	}
 	return invoke<NodeStatus>('get_node_status')
 }

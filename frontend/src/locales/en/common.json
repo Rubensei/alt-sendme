@@ -99,6 +99,7 @@
 			"deviceUnreachable": "This device is still paired. Try again when it is online, or use the manual ticket. Both devices may need compatible relay settings.",
 			"statusOnline": "Online",
 			"statusOffline": "Offline",
+			"statusConnecting": "Connecting...",
 			"statusUnpaired": "Unpaired",
 			"statusRePairRequired": "Re-pair required",
 			"unknownPeer": "Unknown device"
@@ -306,6 +307,7 @@
 			"removeDevice": "Remove device",
 			"statusOnline": "Online",
 			"statusOffline": "Offline",
+			"statusConnecting": "Connecting...",
 			"statusUnpaired": "Unpaired",
 			"statusRePairRequired": "Re-pair required",
 			"unpairedHint": "This device removed the pairing. Remove it from your list.",

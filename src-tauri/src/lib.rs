@@ -129,10 +129,17 @@ pub fn run() {
                     let state = handle.state::<state::AppStateMutex>();
                     let init_handle = handle.clone();
                     match init_node_service(init_handle).await {
-                        Ok(()) => {}
+                        Ok(()) => {
+                            if let Err(error) = handle.emit("device-node-ready", ()) {
+                                tracing::warn!(%error, "failed to emit device-node-ready");
+                            }
+                        }
                         Err(error) => {
                             tracing::error!(%error, "failed to initialize device node");
-                            state.lock().await.node_init_error = Some(error);
+                            state.lock().await.node_init_error = Some(error.clone());
+                            if let Err(emit_error) = handle.emit("device-node-failed", error) {
+                                tracing::warn!(%emit_error, "failed to emit device-node-failed");
+                            }
                         }
                     }
                 });

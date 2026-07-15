@@ -226,7 +226,11 @@ function invokeWebStub<T>(cmd: string, args?: Record<string, unknown>): T {
 		case 'get_sharing_status':
 			return getWebSharingTicket() as T
 		case 'get_node_status':
-			return { status: 'unavailable', reason: 'desktop_only' } as T
+			return {
+				status: 'unavailable',
+				reason: 'desktop_only',
+				network_ready: false,
+			} as T
 		case 'get_device_info':
 			return null as T
 		case 'set_device_display_name':

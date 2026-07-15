@@ -7,7 +7,10 @@ import {
 	type DeviceInfo,
 	type PairedDevice,
 } from '@/lib/pairing-api'
-import { useNodeCapabilityStore } from '@/store/node-capability-store'
+import {
+	isNodeStatusSettled,
+	useNodeCapabilityStore,
+} from '@/store/node-capability-store'
 
 type PairingDataState = {
 	devices: PairedDevice[]
@@ -47,6 +50,10 @@ export const usePairingDataStore = create<PairingDataState>((set) => ({
 
 		const { nodeStatus, hasResolved } = useNodeCapabilityStore.getState()
 		if (!hasResolved) return
+		if (nodeStatus.status === 'starting' || !isNodeStatusSettled(nodeStatus)) {
+			// Node still booting — keep previous data and wait for ready.
+			return
+		}
 		if (nodeStatus.status !== 'ready') {
 			set({
 				devices: [],

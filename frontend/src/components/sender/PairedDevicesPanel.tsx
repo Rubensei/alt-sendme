@@ -21,6 +21,7 @@ interface PairedDevicesPanelProps {
 	pairedDevices: PairedDevice[]
 	pairedInviteStatus: Record<string, PairedInviteStatus>
 	isNodeReady: boolean
+	isNodeStatusPending?: boolean
 	hasTicket: boolean
 	onInvitePairedDevice?: (endpointId: string) => Promise<boolean>
 	onInviteSuccess?: () => void
@@ -33,6 +34,7 @@ export function PairedDevicesPanel({
 	pairedDevices,
 	pairedInviteStatus,
 	isNodeReady,
+	isNodeStatusPending = false,
 	hasTicket,
 	onInvitePairedDevice,
 	onInviteSuccess,
@@ -172,11 +174,16 @@ export function PairedDevicesPanel({
 				</div>
 			) : null}
 
-			{!isNodeReady && (
+			{isNodeStatusPending ? (
+				<p className="flex shrink-0 items-center gap-2 rounded-md border border-dashed px-3 py-3 text-xs text-muted-foreground">
+					<Loader2 className="h-3.5 w-3.5 animate-spin" />
+					{t('common:loading')}
+				</p>
+			) : !isNodeReady ? (
 				<p className="shrink-0 rounded-md border border-dashed px-3 py-3 text-xs text-muted-foreground">
 					{t('common:sender.sharingActive.devices.nodeUnavailable')}
 				</p>
-			)}
+			) : null}
 
 			{showSearch && sortedDevices.length > 0 ? (
 				<PairedDevicesSearchField

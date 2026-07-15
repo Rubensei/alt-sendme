@@ -634,19 +634,32 @@ pub async fn init_node_service(app_handle: tauri::AppHandle) -> Result<(), Strin
 pub struct NodeStatusResponse {
     pub status: String,
     pub reason: Option<String>,
+    /// When status is ready: whether the home relay / network path is warmed up.
+    #[serde(default)]
+    pub network_ready: bool,
 }
 
 #[cfg(any(desktop, target_os = "android"))]
 fn node_status_from_state(guard: &crate::state::AppState) -> NodeStatusResponse {
-    if guard.node.is_some() {
+    if let Some(node) = &guard.node {
         return NodeStatusResponse {
             status: "ready".to_string(),
             reason: None,
+            network_ready: node.is_network_ready(),
+        };
+    }
+    // Init still in flight: distinguish from a hard failure so the UI keeps waiting.
+    if guard.node_init_error.is_none() {
+        return NodeStatusResponse {
+            status: "starting".to_string(),
+            reason: None,
+            network_ready: false,
         };
     }
     NodeStatusResponse {
         status: "unavailable".to_string(),
         reason: guard.node_init_error.clone(),
+        network_ready: false,
     }
 }
 

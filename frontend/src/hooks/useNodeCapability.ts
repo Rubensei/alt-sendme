@@ -1,7 +1,10 @@
 import { useCallback, useEffect } from 'react'
 import { listen } from '@/lib/platform-api'
 import { IS_PAIRING_CAPABLE } from '@/lib/platform'
-import { useNodeCapabilityStore } from '@/store/node-capability-store'
+import {
+	ensureNodeCapabilityLifecycle,
+	useNodeCapabilityStore,
+} from '@/store/node-capability-store'
 
 let devicePairedListenerStarted = false
 
@@ -16,9 +19,11 @@ function ensureDevicePairedListener() {
 export function useNodeCapability() {
 	const nodeStatus = useNodeCapabilityStore((s) => s.nodeStatus)
 	const hasResolved = useNodeCapabilityStore((s) => s.hasResolved)
+	const isNetworkReady = useNodeCapabilityStore((s) => s.isNetworkReady)
 	const refresh = useNodeCapabilityStore((s) => s.refresh)
 
 	useEffect(() => {
+		ensureNodeCapabilityLifecycle()
 		ensureDevicePairedListener()
 		void refresh()
 	}, [refresh])
@@ -31,6 +36,7 @@ export function useNodeCapability() {
 	return {
 		nodeStatus,
 		isNodeReady,
+		isNetworkReady: IS_PAIRING_CAPABLE ? isNetworkReady : true,
 		isNodeStatusPending,
 		refreshNodeStatus,
 		hasResolved,
