@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, CSSProperties } from 'react'
+import type { CSSProperties } from 'react'
 import {
 	AE,
 	AU,
@@ -84,7 +84,8 @@ type CountryFlagProps = {
 	title?: string
 	className?: string
 	style?: CSSProperties
-} & Omit<ComponentPropsWithoutRef<'svg'>, 'children'>
+	'aria-label'?: string
+}
 
 export function CountryFlag({
 	countryCode,
@@ -92,7 +93,6 @@ export function CountryFlag({
 	className,
 	style,
 	'aria-label': ariaLabel,
-	...props
 }: CountryFlagProps) {
 	const code = countryCode.toUpperCase()
 	if (!(code in FLAGS)) return null
@@ -106,7 +106,6 @@ export function CountryFlag({
 			aria-label={label}
 			className={cn(className)}
 			style={style}
-			{...props}
 		/>
 	)
 }
